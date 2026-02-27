@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pong</title>
+  <style>
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      font-family: monospace;
+    }
+    h1 {
+      color: #fff;
+      font-size: 1.4rem;
+      margin-bottom: 16px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    canvas {
+      border: 2px solid #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>ari weinstein sucks</h1>
+  <canvas id="pong" width="800" height="500"></canvas>
+  <script>
+    const canvas = document.getElementById('pong');
+    const ctx = canvas.getContext('2d');
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const PADDLE_W = 12;
+    const PADDLE_H = 80;
+    const BALL_SIZE = 10;
+    const AI_SPEED = 4;
+
+    let playerY = H / 2 - PADDLE_H / 2;
+    let aiY = H / 2 - PADDLE_H / 2;
+    let ball = { x: W / 2, y: H / 2, vx: 4, vy: 3 };
+    let playerScore = 0;
+    let aiScore = 0;
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      playerY = e.clientY - rect.top - PADDLE_H / 2;
+      playerY = Math.max(0, Math.min(H - PADDLE_H, playerY));
+    });
+
+    function moveAI() {
+      const aiCenter = aiY + PADDLE_H / 2;
+      if (aiCenter < ball.y - 5) {
+        aiY += AI_SPEED;
+      } else if (aiCenter > ball.y + 5) {
+        aiY -= AI_SPEED;
+      }
+      aiY = Math.max(0, Math.min(H - PADDLE_H, aiY));
+    }
+
+    function resetBall(direction) {
+      ball = { x: W / 2, y: H / 2, vx: 4 * direction, vy: 3 * (Math.random() > 0.5 ? 1 : -1) };
+    }
+
+    function updateBall() {
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Top/bottom wall bounce
+      if (ball.y - BALL_SIZE / 2 <= 0 || ball.y + BALL_SIZE / 2 >= H) {
+        ball.vy *= -1;
+        ball.y = ball.y - BALL_SIZE / 2 <= 0 ? BALL_SIZE / 2 : H - BALL_SIZE / 2;
+      }
+
+      // Player paddle collision (left)
+      if (
+        ball.x - BALL_SIZE / 2 <= 20 + PADDLE_W &&
+        ball.x - BALL_SIZE / 2 >= 20 &&
+        ball.y >= playerY &&
+        ball.y <= playerY + PADDLE_H
+      ) {
+        ball.vx = Math.abs(ball.vx) * 1.05;
+        ball.x = 20 + PADDLE_W + BALL_SIZE / 2;
+      }
+
+      // AI paddle collision (right)
+      if (
+        ball.x + BALL_SIZE / 2 >= W - 20 - PADDLE_W &&
+        ball.x + BALL_SIZE / 2 <= W - 20 &&
+        ball.y >= aiY &&
+        ball.y <= aiY + PADDLE_H
+      ) {
+        ball.vx = -Math.abs(ball.vx) * 1.05;
+        ball.x = W - 20 - PADDLE_W - BALL_SIZE / 2;
+      }
+
+      // Scoring
+      if (ball.x < 0) {
+        aiScore++;
+        resetBall(1);
+      } else if (ball.x > W) {
+        playerScore++;
+        resetBall(-1);
+      }
+    }
+
+    function draw() {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      // Center dashed line
+      ctx.setLineDash([10, 10]);
+      ctx.strokeStyle = '#555';
+      ctx.beginPath();
+      ctx.moveTo(W / 2, 0);
+      ctx.lineTo(W / 2, H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Scores
+      ctx.fillStyle = '#fff';
+      ctx.font = '48px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(playerScore, W / 4, 60);
+      ctx.fillText(aiScore, (3 * W) / 4, 60);
+
+      // Player paddle (left)
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(20, playerY, PADDLE_W, PADDLE_H);
+
+      // AI paddle (right)
+      ctx.fillRect(W - 20 - PADDLE_W, aiY, PADDLE_W, PADDLE_H);
+
+      // Ball
+      ctx.fillRect(ball.x - BALL_SIZE / 2, ball.y - BALL_SIZE / 2, BALL_SIZE, BALL_SIZE);
+    }
+
+    function gameLoop() {
+      updateBall();
+      moveAI();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
