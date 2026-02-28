@@ -209,7 +209,48 @@
       }
     }
 
-    function VocabApp() {
+    function PasswordScreen({ onLogin }) {
+  const [pw, setPw] = React.useState("");
+  const [shake, setShake] = React.useState(false);
+
+  const handleSubmit = () => {
+    const trimmed = pw.trim();
+    if (!trimmed) {
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      return;
+    }
+    const existing = loadProfile(trimmed);
+    onLogin(trimmed, existing);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-sm text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Vocabulario</h1>
+        <p className="text-sm text-gray-400 mb-6">Enter your password to load your progress</p>
+        <input
+          type="password"
+          value={pw}
+          onChange={e => setPw(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          placeholder="Password"
+          autoFocus
+          className={`w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-orange-400 focus:outline-none text-gray-800 mb-4 transition-all ${shake ? "border-red-400" : ""}`}
+        />
+        <button
+          onClick={handleSubmit}
+          className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow-md transition-all"
+        >
+          Continue →
+        </button>
+        <p className="text-xs text-gray-400 mt-4">New password? A fresh profile will be created.</p>
+      </div>
+    </div>
+  );
+}
+
+    function VocabApp({ profile, setProfile }) {
       const [mode, setMode] = useState("menu");
       const [selectedSections, setSelectedSections] = useState(new Set(SECTIONS));
       const [direction, setDirection] = useState("es-en");
@@ -814,8 +855,26 @@
       return null;
     }
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<VocabApp />);
+    function App() {
+  const [profile, setProfile] = React.useState(null); // { password, data }
+
+  const handleLogin = (password, existingData) => {
+    const data = existingData || {
+      direction: "es-en",
+      selectedSections: Object.keys(ALL_VOCAB),
+      srData: {},
+      quizHistory: [],
+      matchBest: null,
+    };
+    setProfile({ password, data });
+  };
+
+  if (!profile) return <PasswordScreen onLogin={handleLogin} />;
+  return <VocabApp profile={profile} setProfile={setProfile} />;
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
   </script>
 </body>
 </html>
