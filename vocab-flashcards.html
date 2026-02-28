@@ -181,6 +181,28 @@
       return { ...card, interval, easeFactor, reps, graduated };
     }
 
+    // ── Profile persistence ────────────────────────────────────────────────────
+    function profileKey(password) {
+      return `vocab_profile_${password}`;
+    }
+
+    function loadProfile(password) {
+      try {
+        const raw = localStorage.getItem(profileKey(password));
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveProfile(password, data) {
+      try {
+        localStorage.setItem(profileKey(password), JSON.stringify(data));
+      } catch {
+        // storage full or private browsing — fail silently
+      }
+    }
+
     function VocabApp() {
       const [mode, setMode] = useState("menu");
       const [selectedSections, setSelectedSections] = useState(new Set(SECTIONS));
