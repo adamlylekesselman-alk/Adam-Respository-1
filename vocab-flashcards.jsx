@@ -1,0 +1,643 @@
+import { useState, useEffect, useCallback } from "react";
+
+const ALL_VOCAB = {
+  "Lectura: Latinx": [
+    ["Abarcar", "to encompass; to include"],
+    ["Elección personal", "personal choice"],
+    ["Ajena", "somebody else's; other people's"],
+    ["Elemento clave (el)", "key element"],
+    ["Al utilizar", "by utilizing"],
+    ["En curso", "ongoing; in process"],
+    ["Alfabetización (la)", "literacy"],
+    ["En pocas palabras", "in short"],
+    ["Alinearse", "to align"],
+    ["Encuesta (la)", "survey; poll"],
+    ["Asemejarse", "to resemble"],
+    ["Entretejido", "intertwined"],
+    ["Aversión (la)", "loathing; aversion"],
+    ["Identificarse", "to identify oneself"],
+    ["Blanqueo (el)", "whitewashing"],
+    ["Intricadamente", "intricately"],
+    ["Borrado cultural (el)", "cultural erasure"],
+    ["Más bien", "rather"],
+    ["Brecha generacional (la)", "generational gap"],
+    ["Obedecer", "to obey"],
+    ["Conllevar", "to entail; to involve"],
+    ["Obligar", "to compel; to oblige"],
+    ["Cuyo", "whose"],
+    ["Promover", "to foster"],
+    ["Desconocimiento (el)", "unawareness; ignorance"],
+    ["Provenir", "to come from"],
+    ["Disminuir", "to reduce"],
+    ["Reemplazar", "to replace"],
+  ],
+  "Documental: Hecho en Los Ángeles": [
+    ["Abogado/a (el/la)", "attorney"],
+    ["Jornalero/a (el/la)", "laborer"],
+    ["Aguantar", "to put up with"],
+    ["Luchar", "to fight"],
+    ["Apelación (la) / apelar", "appeal; to appeal"],
+    ["Máquina de coser", "sewing machine"],
+    ["Barrendero/a (el/la)", "street sweeper"],
+    ["Más o menos", "so-so"],
+    ["Boicot (el)", "boycott"],
+    ["No lucrativo", "non profit"],
+    ["Brincar", "to jump"],
+    ["Organización Mundial del Comercio (la)", "World Trade Organization"],
+    ["Centro comunitario (el)", "community center"],
+    ["Patrón (el)", "boss"],
+    ["Contrademanda (la)", "countersuing"],
+    ["Planchadora (la)", "ironer"],
+    ["Correr a alguien", "to fire somebody"],
+    ["Ponerse rojo", "to turn red; to blush"],
+    ["Demanda (la)", "the lawsuit"],
+    ["Raíces (la)", "roots"],
+    ["Demandante (el/la)", "plaintiff"],
+    ["Rancho (el)", "ranch"],
+    ["Derechos (los)", "rights"],
+    ["Rechazar", "to deny"],
+    ["Desmadre (el)", "a mess"],
+    ["Rompedor/a (el/la)", "groundbreaking"],
+    ["Etiqueta (la)", "label"],
+    ["Ropa (la)", "clothing"],
+    ["Explotación (la)", "exploitation"],
+    ["Salario mínimo (el)", "minimum wage"],
+    ["Fábrica de costura (la)", "garment industry"],
+    ["Salario/sueldo (el)", "salary"],
+    ["Fabricante (el)", "the manufacturer"],
+    ["Subcontratador (el)", "subcontractor"],
+    ["Firmar", "to sign"],
+    ["Superarse", "to better oneself"],
+    ["Ilusiones (las) / sueños (los)", "dreams"],
+    ["Taller clandestino (el)", "sweatshop"],
+    ["Indocumentado/a (el/la)", "undocumented"],
+    ["Trabajadora doméstica (la)", "domestic worker"],
+  ],
+  "Cortometraje: El Rincón de Venezuela": [
+    ["Arepa (la)", "cornmeal cake"],
+    ["Embajada (la)", "embassy"],
+    ["Asaltar", "to mug; to rob"],
+    ["Firma (la)", "signature"],
+    ["Antichavista (el/la)", "César Chávez's critic/adversary"],
+    ["Panfleto (el)", "pamphlet"],
+    ["Chavista (el/la)", "Hugo Chávez's supporter"],
+    ["Rincón (el)", "corner; nook"],
+    ["Consulado (el)", "consulate"],
+    ["Subsistir", "to survive"],
+  ],
+  "Vocabulario General Útil": [
+    ["Acoger", "to welcome; to receive"],
+    ["Hispano/a", "Hispanic; Hispanic American"],
+    ["Acogedor", "welcoming; warm"],
+    ["Latino/a", "Latino; Latin American"],
+    ["Acostumbrarse a", "to become accustomed"],
+    ["Lengua materna (la)", "mother tongue"],
+    ["Aculturación (la)", "acculturation"],
+    ["Mayoría (la)", "majority"],
+    ["Asimilarse", "to assimilate"],
+    ["Minoría (la)", "minority"],
+    ["Aporte (el)", "contribution"],
+    ["Orgullo (el)", "pride"],
+    ["Avergonzarse", "to feel ashamed or embarrassed"],
+    ["Orgulloso/a", "proud"],
+    ["Bilingüe", "bilingual"],
+    ["Porcentaje (el)", "percentage"],
+    ["Crisol (el)", "the melting pot"],
+    ["Porciento (el)", "percent"],
+    ["Emigrar", "to emigrate"],
+    ["Preservación (la)", "conservation"],
+    ["Estadounidense (el/la)", "American from the U.S."],
+    ["Primera, segunda generación (la)", "first, second generation"],
+    ["Éxito (el)", "success"],
+    ["Representación (la)", "representation"],
+    ["Formación académica (la)", "formal education"],
+    ["Resiliencia (la)", "resilience"],
+    ["Impuestos (los)", "taxes"],
+    ["Vergüenza (la)", "shame"],
+    ["Inclusivo", "inclusive"],
+    ["Vergonzoso", "shy; shameful"],
+    ["Herencia (la)", "heritage"],
+  ],
+};
+
+const SECTIONS = Object.keys(ALL_VOCAB);
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export default function VocabApp() {
+  const [mode, setMode] = useState("menu"); // menu, flashcards, quiz, results
+  const [selectedSections, setSelectedSections] = useState(new Set(SECTIONS));
+  const [direction, setDirection] = useState("es-en"); // es-en or en-es
+  const [cards, setCards] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [known, setKnown] = useState([]);
+  const [unknown, setUnknown] = useState([]);
+  // quiz state
+  const [quizCards, setQuizCards] = useState([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizInput, setQuizInput] = useState("");
+  const [quizFeedback, setQuizFeedback] = useState(null);
+  const [quizScore, setQuizScore] = useState(0);
+  const [quizResults, setQuizResults] = useState([]);
+  // match game
+  const [matchCards, setMatchCards] = useState([]);
+  const [matchSelected, setMatchSelected] = useState([]);
+  const [matchMatched, setMatchMatched] = useState(new Set());
+  const [matchMisses, setMatchMisses] = useState(0);
+  const [matchDone, setMatchDone] = useState(false);
+
+  const getActiveCards = useCallback(() => {
+    let all = [];
+    for (const sec of selectedSections) {
+      all = all.concat(ALL_VOCAB[sec]);
+    }
+    return shuffle(all);
+  }, [selectedSections]);
+
+  const totalWords = Array.from(selectedSections).reduce(
+    (sum, s) => sum + (ALL_VOCAB[s]?.length || 0), 0
+  );
+
+  const toggleSection = (sec) => {
+    setSelectedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sec)) next.delete(sec);
+      else next.add(sec);
+      return next;
+    });
+  };
+
+  const startFlashcards = () => {
+    const c = getActiveCards();
+    setCards(c);
+    setCurrentIndex(0);
+    setFlipped(false);
+    setKnown([]);
+    setUnknown([]);
+    setMode("flashcards");
+  };
+
+  const startQuiz = () => {
+    const c = getActiveCards().slice(0, 20);
+    setQuizCards(c);
+    setQuizIndex(0);
+    setQuizInput("");
+    setQuizFeedback(null);
+    setQuizScore(0);
+    setQuizResults([]);
+    setMode("quiz");
+  };
+
+  const startMatch = () => {
+    const pool = getActiveCards().slice(0, 6);
+    const items = [];
+    pool.forEach(([es, en], i) => {
+      items.push({ id: `es-${i}`, text: es, pairId: i, type: "es" });
+      items.push({ id: `en-${i}`, text: en, pairId: i, type: "en" });
+    });
+    setMatchCards(shuffle(items));
+    setMatchSelected([]);
+    setMatchMatched(new Set());
+    setMatchMisses(0);
+    setMatchDone(false);
+    setMode("match");
+  };
+
+  // Flashcard handlers
+  const handleFlashcardResponse = (isKnown) => {
+    const card = cards[currentIndex];
+    if (isKnown) setKnown((p) => [...p, card]);
+    else setUnknown((p) => [...p, card]);
+    setFlipped(false);
+    if (currentIndex + 1 >= cards.length) setMode("results");
+    else setCurrentIndex((i) => i + 1);
+  };
+
+  // Quiz handlers
+  const checkQuiz = () => {
+    const [es, en] = quizCards[quizIndex];
+    const answer = direction === "es-en" ? en : es;
+    const input = quizInput.trim().toLowerCase();
+    const correct = answer.toLowerCase();
+    const isCorrect =
+      input === correct ||
+      correct.includes(input) ||
+      input.includes(correct.split(";")[0].trim().toLowerCase());
+    setQuizFeedback({ isCorrect, correctAnswer: answer });
+    if (isCorrect) setQuizScore((s) => s + 1);
+    setQuizResults((r) => [
+      ...r,
+      { word: direction === "es-en" ? es : en, answer, userAnswer: quizInput.trim(), isCorrect },
+    ]);
+  };
+
+  const nextQuiz = () => {
+    setQuizFeedback(null);
+    setQuizInput("");
+    if (quizIndex + 1 >= quizCards.length) setMode("quizResults");
+    else setQuizIndex((i) => i + 1);
+  };
+
+  // Match handlers
+  const handleMatchClick = (card) => {
+    if (matchMatched.has(card.pairId) && matchMatched.has(card.pairId + "-done")) return;
+    if (matchSelected.length === 1 && matchSelected[0].id === card.id) return;
+
+    const next = [...matchSelected, card];
+    if (next.length === 2) {
+      if (next[0].pairId === next[1].pairId && next[0].type !== next[1].type) {
+        const newMatched = new Set(matchMatched);
+        newMatched.add(next[0].id);
+        newMatched.add(next[1].id);
+        setMatchMatched(newMatched);
+        if (newMatched.size === matchCards.length) setMatchDone(true);
+      } else {
+        setMatchMisses((m) => m + 1);
+      }
+      setTimeout(() => setMatchSelected([]), 400);
+    }
+    setMatchSelected(next);
+  };
+
+  const sectionColor = {
+    "Lectura: Latinx": { bg: "bg-violet-50", border: "border-violet-300", tag: "bg-violet-100 text-violet-700" },
+    "Documental: Hecho en Los Ángeles": { bg: "bg-amber-50", border: "border-amber-300", tag: "bg-amber-100 text-amber-700" },
+    "Cortometraje: El Rincón de Venezuela": { bg: "bg-emerald-50", border: "border-emerald-300", tag: "bg-emerald-100 text-emerald-700" },
+    "Vocabulario General Útil": { bg: "bg-sky-50", border: "border-sky-300", tag: "bg-sky-100 text-sky-700" },
+  };
+
+  // MENU
+  if (mode === "menu") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 p-4 sm:p-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">Vocabulario</h1>
+            <p className="text-lg text-gray-500">Mes Herencia Hispana — Parte II</p>
+            <p className="text-sm text-gray-400 mt-1">{totalWords} words selected</p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Sections</h2>
+            <div className="space-y-2">
+              {SECTIONS.map((sec) => {
+                const colors = sectionColor[sec];
+                const active = selectedSections.has(sec);
+                return (
+                  <button
+                    key={sec}
+                    onClick={() => toggleSection(sec)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all flex items-center justify-between ${
+                      active
+                        ? `${colors.bg} ${colors.border}`
+                        : "bg-gray-50 border-gray-200 opacity-50"
+                    }`}
+                  >
+                    <span className="font-medium text-gray-800 text-sm">{sec}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${active ? colors.tag : "bg-gray-200 text-gray-500"}`}>
+                      {ALL_VOCAB[sec].length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Direction</h2>
+            <div className="flex gap-2">
+              {[
+                ["es-en", "Spanish → English"],
+                ["en-es", "English → Spanish"],
+              ].map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setDirection(val)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    direction === val
+                      ? "bg-orange-500 text-white shadow-md"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={startFlashcards}
+              disabled={totalWords === 0}
+              className="w-full py-4 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg shadow-lg shadow-orange-200 transition-all disabled:opacity-40"
+            >
+              Flashcards
+            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={startQuiz}
+                disabled={totalWords === 0}
+                className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium shadow-md shadow-rose-200 transition-all disabled:opacity-40"
+              >
+                Written Quiz (20)
+              </button>
+              <button
+                onClick={startMatch}
+                disabled={totalWords < 6}
+                className="flex-1 py-3 rounded-xl bg-violet-500 hover:bg-violet-600 text-white font-medium shadow-md shadow-violet-200 transition-all disabled:opacity-40"
+              >
+                Match Game
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // FLASHCARDS
+  if (mode === "flashcards") {
+    const card = cards[currentIndex];
+    const front = direction === "es-en" ? card[0] : card[1];
+    const back = direction === "es-en" ? card[1] : card[0];
+    const progress = ((currentIndex) / cards.length) * 100;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 p-4 sm:p-8 flex flex-col items-center">
+        <div className="w-full max-w-lg">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setMode("menu")} className="text-gray-400 hover:text-gray-600 text-sm font-medium">
+              ← Back
+            </button>
+            <span className="text-sm text-gray-500 font-medium">
+              {currentIndex + 1} / {cards.length}
+            </span>
+          </div>
+
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-8">
+            <div className="bg-orange-400 h-1.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+          </div>
+
+          <div
+            onClick={() => setFlipped(!flipped)}
+            className="w-full min-h-64 bg-white rounded-3xl shadow-lg border border-gray-100 flex flex-col items-center justify-center p-8 cursor-pointer select-none hover:shadow-xl transition-shadow"
+          >
+            {!flipped ? (
+              <>
+                <p className="text-2xl font-bold text-gray-900 text-center">{front}</p>
+                <p className="text-sm text-gray-400 mt-4">tap to reveal</p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg text-gray-400 mb-2 text-center">{front}</p>
+                <p className="text-2xl font-bold text-orange-600 text-center">{back}</p>
+              </>
+            )}
+          </div>
+
+          {flipped && (
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => handleFlashcardResponse(false)}
+                className="flex-1 py-3.5 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-all"
+              >
+                Still learning
+              </button>
+              <button
+                onClick={() => handleFlashcardResponse(true)}
+                className="flex-1 py-3.5 rounded-xl bg-green-100 hover:bg-green-200 text-green-700 font-semibold transition-all"
+              >
+                Got it!
+              </button>
+            </div>
+          )}
+
+          <div className="flex justify-center gap-6 mt-6 text-sm">
+            <span className="text-green-600 font-medium">{known.length} known</span>
+            <span className="text-red-500 font-medium">{unknown.length} learning</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // RESULTS (flashcards)
+  if (mode === "results") {
+    const retryUnknown = () => {
+      setCards(shuffle(unknown));
+      setCurrentIndex(0);
+      setFlipped(false);
+      setKnown([]);
+      setUnknown([]);
+      setMode("flashcards");
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 p-4 sm:p-8 flex flex-col items-center">
+        <div className="max-w-lg w-full text-center">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Session Complete!</h2>
+          <div className="flex justify-center gap-8 my-8">
+            <div className="bg-green-50 rounded-2xl p-6 w-32">
+              <p className="text-3xl font-bold text-green-600">{known.length}</p>
+              <p className="text-sm text-green-700 mt-1">Known</p>
+            </div>
+            <div className="bg-red-50 rounded-2xl p-6 w-32">
+              <p className="text-3xl font-bold text-red-500">{unknown.length}</p>
+              <p className="text-sm text-red-600 mt-1">Review</p>
+            </div>
+          </div>
+
+          {unknown.length > 0 && (
+            <>
+              <button onClick={retryUnknown} className="w-full py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow-md mb-3">
+                Retry missed words ({unknown.length})
+              </button>
+              <div className="bg-white rounded-xl border border-gray-100 p-4 mt-4 text-left max-h-64 overflow-y-auto">
+                {unknown.map(([es, en], i) => (
+                  <div key={i} className="flex justify-between py-2 border-b border-gray-50 last:border-0 text-sm">
+                    <span className="font-medium text-gray-800">{es}</span>
+                    <span className="text-gray-500">{en}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <button onClick={() => setMode("menu")} className="mt-4 text-gray-400 hover:text-gray-600 text-sm font-medium">
+            ← Back to menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // QUIZ
+  if (mode === "quiz") {
+    const card = quizCards[quizIndex];
+    const prompt = direction === "es-en" ? card[0] : card[1];
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-orange-50 p-4 sm:p-8 flex flex-col items-center">
+        <div className="w-full max-w-lg">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setMode("menu")} className="text-gray-400 hover:text-gray-600 text-sm font-medium">
+              ← Back
+            </button>
+            <span className="text-sm text-gray-500 font-medium">
+              {quizIndex + 1} / {quizCards.length}
+            </span>
+          </div>
+
+          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-8">
+            <div className="bg-rose-400 h-1.5 rounded-full transition-all" style={{ width: `${(quizIndex / quizCards.length) * 100}%` }} />
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-lg border border-gray-100 p-8 text-center mb-6">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">
+              {direction === "es-en" ? "Translate to English" : "Translate to Spanish"}
+            </p>
+            <p className="text-2xl font-bold text-gray-900">{prompt}</p>
+          </div>
+
+          {!quizFeedback ? (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={quizInput}
+                onChange={(e) => setQuizInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && quizInput.trim() && checkQuiz()}
+                placeholder="Type your answer..."
+                className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-rose-400 focus:outline-none text-gray-800"
+                autoFocus
+              />
+              <button
+                onClick={checkQuiz}
+                disabled={!quizInput.trim()}
+                className="px-6 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold disabled:opacity-40"
+              >
+                Check
+              </button>
+            </div>
+          ) : (
+            <div className="text-center">
+              <div className={`rounded-2xl p-5 mb-4 ${quizFeedback.isCorrect ? "bg-green-50" : "bg-red-50"}`}>
+                <p className={`text-lg font-bold ${quizFeedback.isCorrect ? "text-green-600" : "text-red-500"}`}>
+                  {quizFeedback.isCorrect ? "Correct!" : "Not quite"}
+                </p>
+                {!quizFeedback.isCorrect && (
+                  <p className="text-gray-600 mt-1">
+                    Answer: <span className="font-semibold">{quizFeedback.correctAnswer}</span>
+                  </p>
+                )}
+              </div>
+              <button onClick={nextQuiz} className="px-8 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold">
+                {quizIndex + 1 >= quizCards.length ? "See Results" : "Next →"}
+              </button>
+            </div>
+          )}
+
+          <p className="text-center text-sm text-green-600 font-medium mt-4">{quizScore} correct so far</p>
+        </div>
+      </div>
+    );
+  }
+
+  // QUIZ RESULTS
+  if (mode === "quizResults") {
+    const pct = Math.round((quizScore / quizCards.length) * 100);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-orange-50 p-4 sm:p-8 flex flex-col items-center">
+        <div className="max-w-lg w-full text-center">
+          <h2 className="text-3xl font-bold text-gray-900 mb-1">Quiz Complete!</h2>
+          <p className="text-5xl font-bold text-rose-500 my-6">{pct}%</p>
+          <p className="text-gray-500 mb-6">{quizScore} / {quizCards.length} correct</p>
+
+          <div className="bg-white rounded-xl border border-gray-100 p-4 text-left max-h-72 overflow-y-auto mb-6">
+            {quizResults.map((r, i) => (
+              <div key={i} className={`flex items-start gap-2 py-2 border-b border-gray-50 last:border-0 text-sm ${r.isCorrect ? "" : "bg-red-50 -mx-2 px-2 rounded"}`}>
+                <span className={`mt-0.5 ${r.isCorrect ? "text-green-500" : "text-red-400"}`}>
+                  {r.isCorrect ? "✓" : "✗"}
+                </span>
+                <div className="flex-1">
+                  <span className="font-medium text-gray-800">{r.word}</span>
+                  {!r.isCorrect && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      You: "{r.userAnswer}" → Correct: "{r.answer}"
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => setMode("menu")} className="text-gray-400 hover:text-gray-600 text-sm font-medium">
+            ← Back to menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // MATCH GAME
+  if (mode === "match") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-4 sm:p-8 flex flex-col items-center">
+        <div className="w-full max-w-xl">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setMode("menu")} className="text-gray-400 hover:text-gray-600 text-sm font-medium">
+              ← Back
+            </button>
+            <span className="text-sm text-gray-500 font-medium">Misses: {matchMisses}</span>
+          </div>
+
+          {matchDone ? (
+            <div className="text-center py-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">All Matched!</h2>
+              <p className="text-gray-500 mb-6">{matchMisses} misses</p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={startMatch} className="px-6 py-3 rounded-xl bg-violet-500 text-white font-semibold">
+                  Play Again
+                </button>
+                <button onClick={() => setMode("menu")} className="px-6 py-3 rounded-xl bg-gray-200 text-gray-700 font-semibold">
+                  Menu
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2.5">
+              {matchCards.map((card) => {
+                const isMatched = matchMatched.has(card.id);
+                const isSelected = matchSelected.some((s) => s.id === card.id);
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => !isMatched && handleMatchClick(card)}
+                    disabled={isMatched}
+                    className={`p-3 rounded-xl text-sm font-medium text-center min-h-20 transition-all ${
+                      isMatched
+                        ? "bg-green-100 text-green-400 border-2 border-green-200"
+                        : isSelected
+                        ? "bg-violet-500 text-white border-2 border-violet-600 shadow-md"
+                        : "bg-white text-gray-800 border-2 border-gray-200 hover:border-violet-300 hover:shadow"
+                    }`}
+                  >
+                    {card.text}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
