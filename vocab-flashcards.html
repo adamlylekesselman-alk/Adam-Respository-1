@@ -22,7 +22,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useCallback } = React;
+    const { useState, useCallback, useRef, useEffect } = React;
 
     const ALL_VOCAB = {
       "Lectura: Latinx": [
@@ -222,9 +222,9 @@
     function PasswordScreen({ onLogin }) {
       const [pw, setPw] = useState("");
       const [shake, setShake] = useState(false);
-      const shakeTimer = React.useRef(null);
+      const shakeTimer = useRef(null);
 
-      React.useEffect(() => {
+      useEffect(() => {
         return () => { if (shakeTimer.current) clearTimeout(shakeTimer.current); };
       }, []);
 
@@ -312,13 +312,11 @@
       );
 
       const toggleSection = (sec) => {
-        setSelectedSections((prev) => {
-          const next = new Set(prev);
-          if (next.has(sec)) next.delete(sec);
-          else next.add(sec);
-          save({ selectedSections: Array.from(next) });
-          return next;
-        });
+        const next = new Set(selectedSections);
+        if (next.has(sec)) next.delete(sec);
+        else next.add(sec);
+        setSelectedSections(next);
+        save({ selectedSections: Array.from(next) });
       };
 
       const startFlashcards = () => {
@@ -941,8 +939,8 @@
       return <VocabApp profile={profile} setProfile={setProfile} />;
     }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
   </script>
 </body>
 </html>
