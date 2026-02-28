@@ -267,8 +267,10 @@
 
     function VocabApp({ profile, setProfile }) {
       const [mode, setMode] = useState("menu");
-      const [selectedSections, setSelectedSections] = useState(new Set(SECTIONS));
-      const [direction, setDirection] = useState("es-en");
+      const [selectedSections, setSelectedSections] = useState(
+        () => new Set(profile.data.selectedSections || SECTIONS)
+      );
+      const [direction, setDirection] = useState(profile.data.direction || "es-en");
       const [cards, setCards] = useState([]);
       const [currentIndex, setCurrentIndex] = useState(0);
       const [flipped, setFlipped] = useState(false);
@@ -291,6 +293,12 @@
       const [learnFlipped, setLearnFlipped] = useState(false);
       const [learnRound, setLearnRound] = useState(0);
 
+      const save = useCallback((updates) => {
+        const newData = { ...profile.data, ...updates };
+        saveProfile(profile.password, newData);
+        setProfile(p => ({ ...p, data: newData }));
+      }, [profile]);
+
       const getActiveCards = useCallback(() => {
         let all = [];
         for (const sec of selectedSections) {
@@ -308,6 +316,7 @@
           const next = new Set(prev);
           if (next.has(sec)) next.delete(sec);
           else next.add(sec);
+          save({ selectedSections: Array.from(next) });
           return next;
         });
       };
@@ -335,10 +344,15 @@
 
       const startLearn = () => {
         const raw = getActiveCards();
-        const deck = srInit(raw);
-        const queue = deck.map((_, i) => i); // all cards due at start
+        const savedSr = profile.data.srData || {};
+        const deck = srInit(raw).map(card => {
+          const saved = savedSr[card.word];
+          return saved ? { ...card, ...saved } : card;
+        });
+        const notGrad = deck.map((_, i) => i).filter(i => !deck[i].graduated);
+        const grad = deck.map((_, i) => i).filter(i => deck[i].graduated);
         setLearnDeck(deck);
-        setLearnQueue(shuffle(queue));
+        setLearnQueue(shuffle(notGrad).concat(shuffle(grad)));
         setLearnFlipped(false);
         setLearnRound(0);
         setMode("learn");
@@ -361,6 +375,11 @@
         }
 
         setLearnDeck(updatedDeck);
+        const newSrData = { ...(profile.data.srData || {}) };
+        updatedDeck.forEach(c => {
+          newSrData[c.word] = { interval: c.interval, easeFactor: c.easeFactor, reps: c.reps, graduated: c.graduated };
+        });
+        save({ srData: newSrData });
         setLearnQueue(nextQueue);
         setLearnFlipped(false);
         setLearnRound(r => r + 1);
@@ -408,10 +427,21 @@
       };
 
       const nextQuiz = () => {
+        if (quizIndex + 1 >= quizCards.length) {
+          const finalScore = quizScore + (quizFeedback?.isCorrect ? 1 : 0);
+          const entry = {
+            date: new Date().toLocaleDateString(),
+            score: finalScore,
+            total: quizCards.length,
+          };
+          const history = [entry, ...(profile.data.quizHistory || [])].slice(0, 10);
+          save({ quizHistory: history });
+          setMode("quizResults");
+        } else {
+          setQuizIndex((i) => i + 1);
+        }
         setQuizFeedback(null);
         setQuizInput("");
-        if (quizIndex + 1 >= quizCards.length) setMode("quizResults");
-        else setQuizIndex((i) => i + 1);
       };
 
       const handleMatchClick = (card) => {
@@ -425,7 +455,13 @@
             newMatched.add(next[0].id);
             newMatched.add(next[1].id);
             setMatchMatched(newMatched);
-            if (newMatched.size === matchCards.length) setMatchDone(true);
+            if (newMatched.size === matchCards.length) {
+              const currentBest = profile.data.matchBest;
+              if (currentBest === null || currentBest === undefined || matchMisses < currentBest) {
+                save({ matchBest: matchMisses });
+              }
+              setMatchDone(true);
+            }
           } else {
             setMatchMisses((m) => m + 1);
           }
@@ -449,6 +485,12 @@
                 <h1 className="text-3xl font-bold text-gray-900 mb-1">Vocabulario</h1>
                 <p className="text-lg text-gray-500">Mes Herencia Hispana — Parte II</p>
                 <p className="text-sm text-gray-400 mt-1">{totalWords} words selected</p>
+                <button
+                  onClick={() => setProfile(null)}
+                  className="text-xs text-gray-400 hover:text-gray-600 mt-2 underline"
+                >
+                  Sign out
+                </button>
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
@@ -481,7 +523,7 @@
                   {[["es-en", "Spanish → English"], ["en-es", "English → Spanish"]].map(([val, label]) => (
                     <button
                       key={val}
-                      onClick={() => setDirection(val)}
+                      onClick={() => { setDirection(val); save({ direction: val }); }}
                       className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
                         direction === val ? "bg-orange-500 text-white shadow-md" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
@@ -514,6 +556,11 @@
                     className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium shadow-md shadow-rose-200 transition-all disabled:opacity-40"
                   >
                     Written Quiz (20)
+                    {profile.data.quizHistory?.length > 0 && (
+                      <span className="block text-xs font-normal opacity-75">
+                        Last: {profile.data.quizHistory[0].score}/{profile.data.quizHistory[0].total}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={startMatch}
@@ -521,6 +568,11 @@
                     className="flex-1 py-3 rounded-xl bg-violet-500 hover:bg-violet-600 text-white font-medium shadow-md shadow-violet-200 transition-all disabled:opacity-40"
                   >
                     Match Game
+                    {profile.data.matchBest !== null && profile.data.matchBest !== undefined && (
+                      <span className="block text-xs font-normal opacity-75">
+                        Best: {profile.data.matchBest} miss{profile.data.matchBest !== 1 ? "es" : ""}
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>
