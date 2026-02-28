@@ -145,6 +145,41 @@
       return a;
     }
 
+    // ── Spaced-repetition helpers (simplified SM-2) ──────────────────────────
+    // Each card entry: { word, def, interval, easeFactor, reps, due }
+    // interval = days until next review (we use it as a relative "rounds" counter in-session)
+    function srInit(cards) {
+      return cards.map(([word, def]) => ({
+        word, def,
+        interval: 0,   // rounds until card is due again (0 = due now)
+        easeFactor: 2.5,
+        reps: 0,
+        graduated: false,
+      }));
+    }
+
+    // rating: 0=Again, 1=Hard, 2=Good, 3=Easy
+    function srRate(card, rating) {
+      let { interval, easeFactor, reps } = card;
+      if (rating === 0) {          // Again — reset
+        reps = 0; interval = 0;
+      } else if (rating === 1) {   // Hard — short delay
+        reps = Math.max(1, reps);
+        interval = Math.max(1, Math.round(interval * 1.2));
+        easeFactor = Math.max(1.3, easeFactor - 0.15);
+      } else if (rating === 2) {   // Good
+        reps += 1;
+        interval = reps === 1 ? 1 : reps === 2 ? 3 : Math.round(interval * easeFactor);
+      } else {                     // Easy
+        reps += 1;
+        interval = reps === 1 ? 2 : Math.round(interval * easeFactor * 1.3);
+        easeFactor = Math.min(3.0, easeFactor + 0.15);
+      }
+      // Graduate when interval is large enough (≥4 rounds) or Easy hit after already knowing it
+      const graduated = rating === 3 && reps >= 2 || interval >= 4;
+      return { ...card, interval, easeFactor, reps, graduated };
+    }
+
     function VocabApp() {
       const [mode, setMode] = useState("menu");
       const [selectedSections, setSelectedSections] = useState(new Set(SECTIONS));
@@ -165,6 +200,12 @@
       const [matchMatched, setMatchMatched] = useState(new Set());
       const [matchMisses, setMatchMisses] = useState(0);
       const [matchDone, setMatchDone] = useState(false);
+      // learn mode
+      const [learnDeck, setLearnDeck] = useState([]);   // full SR card objects
+      const [learnQueue, setLearnQueue] = useState([]); // indices of due cards
+      const [learnPos, setLearnPos] = useState(0);      // position in queue
+      const [learnFlipped, setLearnFlipped] = useState(false);
+      const [learnRound, setLearnRound] = useState(0);
 
       const getActiveCards = useCallback(() => {
         let all = [];
@@ -206,6 +247,47 @@
         setQuizScore(0);
         setQuizResults([]);
         setMode("quiz");
+      };
+
+      const startLearn = () => {
+        const raw = getActiveCards();
+        const deck = srInit(raw);
+        const queue = deck.map((_, i) => i); // all cards due at start
+        setLearnDeck(deck);
+        setLearnQueue(shuffle(queue));
+        setLearnPos(0);
+        setLearnFlipped(false);
+        setLearnRound(0);
+        setMode("learn");
+      };
+
+      const handleLearnRate = (rating) => {
+        const cardIdx = learnQueue[learnPos];
+        const updated = [...learnDeck];
+        updated[cardIdx] = srRate(learnDeck[cardIdx], rating);
+
+        // rebuild queue: non-graduated cards that are now "due" (interval = 0)
+        // we track rounds by decrementing interval each pass
+        let newDeck = updated.map((c, i) => {
+          if (i === cardIdx) return c; // just updated
+          return c;
+        });
+
+        // After rating, figure out next queue
+        const remaining = learnQueue.slice(learnPos + 1);
+
+        // Insert the just-rated card back if not graduated, at position = interval steps ahead
+        let insertQueue = [...remaining];
+        if (!updated[cardIdx].graduated) {
+          const steps = Math.min(updated[cardIdx].interval, insertQueue.length);
+          insertQueue.splice(steps, 0, cardIdx);
+        }
+
+        setLearnDeck(newDeck);
+        setLearnQueue(insertQueue);
+        setLearnPos(0);
+        setLearnFlipped(false);
+        setLearnRound(r => r + 1);
       };
 
       const startMatch = () => {
@@ -335,6 +417,13 @@
               </div>
 
               <div className="space-y-3">
+                <button
+                  onClick={startLearn}
+                  disabled={totalWords === 0}
+                  className="w-full py-4 rounded-2xl bg-teal-500 hover:bg-teal-600 text-white font-semibold text-lg shadow-lg shadow-teal-200 transition-all disabled:opacity-40"
+                >
+                  ✦ Learn  <span className="text-sm font-normal opacity-80 ml-1">spaced repetition</span>
+                </button>
                 <button
                   onClick={startFlashcards}
                   disabled={totalWords === 0}
@@ -582,6 +671,121 @@
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        );
+      }
+
+      // LEARN MODE
+      if (mode === "learn") {
+        const totalCards = learnDeck.length;
+        const graduated = learnDeck.filter(c => c.graduated).length;
+        const remaining = learnQueue.length;
+
+        // Session complete
+        if (remaining === 0) {
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4 sm:p-8 flex flex-col items-center">
+              <div className="max-w-lg w-full text-center pt-16">
+                <div className="text-6xl mb-4">🎓</div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Session Complete!</h2>
+                <p className="text-gray-500 mb-2">You reviewed <span className="font-semibold text-teal-600">{totalCards}</span> words</p>
+                <p className="text-gray-500 mb-8">{learnRound} total reviews across {graduated} graduated cards</p>
+                <div className="flex gap-3 justify-center">
+                  <button onClick={startLearn} className="px-6 py-3 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-semibold shadow-md">
+                    Study Again
+                  </button>
+                  <button onClick={() => setMode("menu")} className="px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold">
+                    Menu
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const cardIdx = learnQueue[learnPos];
+        const card = learnDeck[cardIdx];
+        const front = direction === "es-en" ? card.word : card.def;
+        const back  = direction === "es-en" ? card.def  : card.word;
+        const progressPct = Math.round((graduated / totalCards) * 100);
+
+        // Color the card border by how well-known it is
+        const repColor =
+          card.reps === 0 ? "border-gray-200" :
+          card.reps === 1 ? "border-yellow-300" :
+          card.reps === 2 ? "border-blue-300" :
+                             "border-teal-400";
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4 sm:p-8 flex flex-col items-center">
+            <div className="w-full max-w-lg">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={() => setMode("menu")} className="text-gray-400 hover:text-gray-600 text-sm font-medium">← Back</button>
+                <span className="text-sm text-gray-500 font-medium">{remaining} left · {graduated}/{totalCards} mastered</span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-6">
+                <div className="bg-teal-500 h-2 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
+              </div>
+
+              {/* Card */}
+              <div
+                onClick={() => !learnFlipped && setLearnFlipped(true)}
+                className={`w-full min-h-56 bg-white rounded-3xl shadow-lg border-2 ${repColor} flex flex-col items-center justify-center p-8 transition-all duration-200 ${!learnFlipped ? "cursor-pointer hover:shadow-xl" : ""}`}
+              >
+                {!learnFlipped ? (
+                  <>
+                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-3">
+                      {direction === "es-en" ? "Spanish" : "English"}
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900 text-center">{front}</p>
+                    <p className="text-sm text-teal-400 mt-5 font-medium">tap to reveal →</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-base text-gray-400 mb-1 text-center">{front}</p>
+                    <div className="w-10 h-0.5 bg-gray-200 my-2 rounded-full" />
+                    <p className="text-2xl font-bold text-teal-700 text-center">{back}</p>
+                    {card.reps > 0 && (
+                      <p className="text-xs text-gray-400 mt-4">seen {card.reps}× this session</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Rating buttons — only show after flip */}
+              {learnFlipped && (
+                <div className="mt-5 space-y-2">
+                  <p className="text-center text-xs text-gray-400 uppercase tracking-wide mb-2">How well did you know it?</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: "Again", sub: "forgot", rating: 0, cls: "bg-red-100 hover:bg-red-200 text-red-700 border-red-200" },
+                      { label: "Hard",  sub: "struggled", rating: 1, cls: "bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-200" },
+                      { label: "Good",  sub: "got it", rating: 2, cls: "bg-blue-100 hover:bg-blue-200 text-blue-700 border-blue-200" },
+                      { label: "Easy",  sub: "instant", rating: 3, cls: "bg-teal-100 hover:bg-teal-200 text-teal-700 border-teal-200" },
+                    ].map(({ label, sub, rating, cls }) => (
+                      <button
+                        key={label}
+                        onClick={() => handleLearnRate(rating)}
+                        className={`py-3 rounded-xl border font-semibold text-sm flex flex-col items-center transition-all ${cls}`}
+                      >
+                        <span>{label}</span>
+                        <span className="text-xs font-normal opacity-70 mt-0.5">{sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Legend */}
+              <div className="mt-6 flex justify-center gap-4 text-xs text-gray-400">
+                <span>🔴 Again = review now</span>
+                <span>🟡 Hard = review soon</span>
+                <span>🟢 Easy = graduate</span>
+              </div>
             </div>
           </div>
         );
