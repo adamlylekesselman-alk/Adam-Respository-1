@@ -8,6 +8,16 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+    .animate-shake { animation: shake 0.5s ease-in-out; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -210,45 +220,50 @@
     }
 
     function PasswordScreen({ onLogin }) {
-  const [pw, setPw] = React.useState("");
-  const [shake, setShake] = React.useState(false);
+      const [pw, setPw] = useState("");
+      const [shake, setShake] = useState(false);
+      const shakeTimer = React.useRef(null);
 
-  const handleSubmit = () => {
-    const trimmed = pw.trim();
-    if (!trimmed) {
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-      return;
+      React.useEffect(() => {
+        return () => { if (shakeTimer.current) clearTimeout(shakeTimer.current); };
+      }, []);
+
+      const handleSubmit = () => {
+        const trimmed = pw.trim();
+        if (!trimmed) {
+          setShake(true);
+          shakeTimer.current = setTimeout(() => setShake(false), 500);
+          return;
+        }
+        const existing = loadProfile(trimmed);
+        onLogin(trimmed, existing);
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-sm text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Vocabulario</h1>
+            <p className="text-sm text-gray-400 mb-6">Enter your password to load your progress</p>
+            <input
+              type="password"
+              value={pw}
+              onChange={e => setPw(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSubmit()}
+              placeholder="Password"
+              autoFocus
+              className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none text-gray-800 mb-4 transition-all ${shake ? "border-red-400 animate-shake" : "border-gray-200 focus:border-orange-400"}`}
+            />
+            <button
+              onClick={handleSubmit}
+              className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow-md transition-all"
+            >
+              Continue →
+            </button>
+            <p className="text-xs text-gray-400 mt-4">New password? A fresh profile will be created.</p>
+          </div>
+        </div>
+      );
     }
-    const existing = loadProfile(trimmed);
-    onLogin(trimmed, existing);
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-rose-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-sm text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Vocabulario</h1>
-        <p className="text-sm text-gray-400 mb-6">Enter your password to load your progress</p>
-        <input
-          type="password"
-          value={pw}
-          onChange={e => setPw(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleSubmit()}
-          placeholder="Password"
-          autoFocus
-          className={`w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-orange-400 focus:outline-none text-gray-800 mb-4 transition-all ${shake ? "border-red-400" : ""}`}
-        />
-        <button
-          onClick={handleSubmit}
-          className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold shadow-md transition-all"
-        >
-          Continue →
-        </button>
-        <p className="text-xs text-gray-400 mt-4">New password? A fresh profile will be created.</p>
-      </div>
-    </div>
-  );
-}
 
     function VocabApp({ profile, setProfile }) {
       const [mode, setMode] = useState("menu");
@@ -856,22 +871,23 @@
     }
 
     function App() {
-  const [profile, setProfile] = React.useState(null); // { password, data }
+      const [profile, setProfile] = useState(null); // { password, data }
 
-  const handleLogin = (password, existingData) => {
-    const data = existingData || {
-      direction: "es-en",
-      selectedSections: Object.keys(ALL_VOCAB),
-      srData: {},
-      quizHistory: [],
-      matchBest: null,
-    };
-    setProfile({ password, data });
-  };
+      const handleLogin = (password, existingData) => {
+        const defaults = {
+          direction: "es-en",
+          selectedSections: Object.keys(ALL_VOCAB),
+          srData: {},
+          quizHistory: [],
+          matchBest: null,
+        };
+        const data = existingData ? { ...defaults, ...existingData } : defaults;
+        setProfile({ password, data });
+      };
 
-  if (!profile) return <PasswordScreen onLogin={handleLogin} />;
-  return <VocabApp profile={profile} setProfile={setProfile} />;
-}
+      if (!profile) return <PasswordScreen onLogin={handleLogin} />;
+      return <VocabApp profile={profile} setProfile={setProfile} />;
+    }
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App />);
