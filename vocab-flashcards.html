@@ -183,12 +183,15 @@
 
     // ── Profile persistence ────────────────────────────────────────────────────
     function profileKey(password) {
-      return `vocab_profile_${password}`;
+      if (!password || !password.trim()) return null;
+      return `vocab_profile_${password.trim()}`;
     }
 
     function loadProfile(password) {
+      const key = profileKey(password);
+      if (!key) return null;
       try {
-        const raw = localStorage.getItem(profileKey(password));
+        const raw = localStorage.getItem(key);
         return raw ? JSON.parse(raw) : null;
       } catch {
         return null;
@@ -196,8 +199,11 @@
     }
 
     function saveProfile(password, data) {
+      const key = profileKey(password);
+      if (!key) return;
+      const serialized = JSON.stringify(data); // allow TypeError to surface for bad data
       try {
-        localStorage.setItem(profileKey(password), JSON.stringify(data));
+        localStorage.setItem(key, serialized);
       } catch {
         // storage full or private browsing — fail silently
       }
