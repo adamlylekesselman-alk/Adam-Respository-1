@@ -452,6 +452,7 @@
   }
 
   function startFlash() {
+    if (state.flashTimer) { clearTimeout(state.flashTimer); state.flashTimer = null; }
     state.currentWords = buildSentence();
     state.currentSentence = state.currentWords.join(' ');
     state.wordIndex = 0;
@@ -501,7 +502,7 @@
     const expected = state.currentSentence.toLowerCase().replace(/[^a-z0-9 ]/g, '');
 
     if (typed === expected) {
-      state.score = state.currentWpm;
+      state.score = Math.max(state.score, state.currentWpm);
       document.getElementById('recall-feedback').textContent = '✓ correct!';
       document.getElementById('recall-feedback').className = 'correct';
       input.disabled = true;
