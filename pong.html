@@ -42,7 +42,7 @@
 
     let playerY = H / 2 - PADDLE_H / 2;
     let aiY = H / 2 - PADDLE_H / 2;
-    let ball = { x: W / 2, y: H / 2, vx: 24, vy: 18 };
+    let ball = { x: W / 2, y: H / 2, vx: 19, vy: 14 };
     let playerScore = 0;
     let aiScore = 0;
 
@@ -63,7 +63,7 @@
     }
 
     function resetBall(direction) {
-      ball = { x: W / 2, y: H / 2, vx: 24 * direction, vy: 18 * (Math.random() > 0.5 ? 1 : -1) };
+      ball = { x: W / 2, y: H / 2, vx: 19 * direction, vy: 14 * (Math.random() > 0.5 ? 1 : -1) };
     }
 
     function updateBall() {
