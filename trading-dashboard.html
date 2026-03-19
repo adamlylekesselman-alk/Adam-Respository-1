@@ -363,6 +363,92 @@ const DataFetcher = {
   }
 };
 
+const Calculator = {
+  // Simple Moving Average of last n closes
+  sma(closes, n) {
+    if (closes.length < n) return null;
+    const slice = closes.slice(-n);
+    return slice.reduce((a, b) => a + b, 0) / n;
+  },
+
+  // 14-period RSI (Wilder's smoothing)
+  rsi(closes, period = 14) {
+    if (closes.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    for (let i = closes.length - period; i < closes.length; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff > 0) gains += diff; else losses -= diff;
+    }
+    gains /= period; losses /= period;
+    if (losses === 0) return 100;
+    const rs = gains / losses;
+    return 100 - (100 / (1 + rs));
+  },
+
+  // Percentile rank of last value in the series (0–100)
+  percentile(values) {
+    if (values.length < 2) return null;
+    const last = values.at(-1);
+    const below = values.filter(v => v < last).length;
+    return Math.round((below / (values.length - 1)) * 100);
+  },
+
+  // 5-day linear regression slope (positive = rising)
+  slope5(values) {
+    if (values.length < 5) return 0;
+    const y = values.slice(-5);
+    const n = y.length;
+    const xMean = (n - 1) / 2;
+    const yMean = y.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    y.forEach((val, i) => {
+      num += (i - xMean) * (val - yMean);
+      den += (i - xMean) ** 2;
+    });
+    return den === 0 ? 0 : num / den;
+  },
+
+  // Average True Range over n periods
+  atr(bars, n = 14) {
+    if (bars.length < n + 1) return null;
+    const trs = [];
+    for (let i = 1; i < bars.length; i++) {
+      const b = bars[i], prev = bars[i - 1];
+      trs.push(Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close)));
+    }
+    return trs.slice(-n).reduce((a, b) => a + b, 0) / n;
+  },
+
+  clamp(v, min, max) { return Math.max(min, Math.min(max, v)); },
+
+  // Process raw chart data into useful derived values
+  process(bars) {
+    if (!bars || bars.length < 20) return null;
+    const closes = bars.map(b => b.close);
+    const last   = bars.at(-1);
+    return {
+      price:   last.close,
+      high:    last.high,
+      low:     last.low,
+      open:    last.open,
+      closes,
+      ma20:    this.sma(closes, 20),
+      ma50:    this.sma(closes, 50),
+      ma200:   this.sma(closes, 200),
+      rsi14:   this.rsi(closes),
+      slope5:  this.slope5(closes),
+      pct1yr:  this.percentile(closes),
+      atr14:   this.atr(bars),
+      ret5d:   closes.length >= 6
+                 ? ((last.close - closes.at(-6)) / closes.at(-6)) * 100
+                 : null,
+      ret1d:   closes.length >= 2
+                 ? ((last.close - closes.at(-2)) / closes.at(-2)) * 100
+                 : null,
+    };
+  }
+};
+
 // Placeholder — will be replaced in Tasks 3-10
 const App = { refresh() {}, setMode() {} };
 </script>
