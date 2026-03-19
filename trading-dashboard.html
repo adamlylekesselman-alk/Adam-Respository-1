@@ -280,8 +280,91 @@ button:hover { box-shadow: 0 0 8px var(--neon-green); }
   </div>
 </div>
 <script>
-// JS modules will be added in Tasks 2-10
-const App = { refresh() {}, setMode() {} }; // placeholder to prevent onclick errors
+const CONFIG = {
+  mode: 'swing', // 'swing' | 'day'
+  refreshInterval: 45000,
+  symbols: {
+    spy:     'SPY',
+    qqq:     'QQQ',
+    vix:     '^VIX',
+    tny:     '^TNX',
+    dxy:     'DX-Y.NYB',
+    sectors: [
+      { ticker: 'XLK', name: 'Technology' },
+      { ticker: 'XLF', name: 'Financials' },
+      { ticker: 'XLE', name: 'Energy' },
+      { ticker: 'XLV', name: 'Health Care' },
+      { ticker: 'XLI', name: 'Industrials' },
+      { ticker: 'XLY', name: 'Cons. Discret.' },
+      { ticker: 'XLP', name: 'Cons. Staples' },
+      { ticker: 'XLU', name: 'Utilities' },
+      { ticker: 'XLB', name: 'Materials' },
+      { ticker: 'XLRE', name: 'Real Estate' },
+      { ticker: 'XLC', name: 'Comm. Svcs' },
+    ]
+  },
+  // 2026 FOMC meeting end dates (last day of each meeting)
+  fomcDates: [
+    '2026-01-29','2026-03-19','2026-04-30','2026-06-18',
+    '2026-07-30','2026-09-17','2026-10-29','2026-12-10'
+  ],
+  weights: { volatility: 0.25, momentum: 0.25, trend: 0.20, breadth: 0.20, macro: 0.10 },
+  thresholds: { yes: 80, caution: 60 },
+};
+
+const DataFetcher = {
+  // Fetch 1 year of daily OHLCV for a Yahoo Finance symbol
+  async fetchChart(symbol) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${symbol}`);
+    const json = await res.json();
+    const result = json.chart?.result?.[0];
+    if (!result) throw new Error(`No data for ${symbol}`);
+    const timestamps = result.timestamp;
+    const q = result.indicators.quote[0];
+    const closes = q.close;
+    const highs  = q.high;
+    const lows   = q.low;
+    const opens  = q.open;
+    const volumes = q.volume;
+    // Return array of { date, open, high, low, close, volume }
+    return timestamps.map((ts, i) => ({
+      date:   new Date(ts * 1000).toISOString().slice(0, 10),
+      open:   opens[i],
+      high:   highs[i],
+      low:    lows[i],
+      close:  closes[i],
+      volume: volumes[i],
+    })).filter(d => d.close != null);
+  },
+
+  // Fetch all needed symbols; returns raw data object
+  async fetchAll() {
+    const allSymbols = [
+      CONFIG.symbols.spy, CONFIG.symbols.qqq, CONFIG.symbols.vix,
+      CONFIG.symbols.tny, CONFIG.symbols.dxy,
+      ...CONFIG.symbols.sectors.map(s => s.ticker)
+    ];
+
+    const results = await Promise.allSettled(
+      allSymbols.map(sym => this.fetchChart(sym).then(data => ({ sym, data })))
+    );
+
+    const raw = {};
+    results.forEach(r => {
+      if (r.status === 'fulfilled') {
+        raw[r.value.sym] = r.value.data;
+      } else {
+        console.warn('Fetch failed:', r.reason);
+      }
+    });
+    return raw;
+  }
+};
+
+// Placeholder — will be replaced in Tasks 3-10
+const App = { refresh() {}, setMode() {} };
 </script>
 </body>
 </html>
