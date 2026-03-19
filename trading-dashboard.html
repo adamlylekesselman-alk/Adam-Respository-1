@@ -153,6 +153,8 @@ body::after {
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
+#data-grid .panel:nth-child(4) { grid-column: 1; }
+#data-grid .panel:nth-child(5) { grid-column: 2; }
 
 /* Buttons */
 button {
@@ -197,6 +199,14 @@ button:hover { box-shadow: 0 0 8px var(--neon-green); }
   color: rgba(255,51,102,0.7);
   font-size: 11px;
   font-style: italic;
+}
+@media (max-width: 900px) {
+  #hero-row  { grid-template-columns: 1fr; }
+  #data-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  #data-grid { grid-template-columns: 1fr; }
+  #ticker-right { gap: 8px; }
 }
 </style>
 </head>
@@ -352,11 +362,11 @@ const DataFetcher = {
     );
 
     const raw = {};
-    results.forEach(r => {
+    results.forEach((r, i) => {
       if (r.status === 'fulfilled') {
         raw[r.value.sym] = r.value.data;
       } else {
-        console.warn('Fetch failed:', r.reason);
+        console.warn(`Fetch failed for ${allSymbols[i]}:`, r.reason);
       }
     });
     return raw;
