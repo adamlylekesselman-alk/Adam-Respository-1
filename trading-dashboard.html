@@ -459,6 +459,106 @@ const Calculator = {
   }
 };
 
+const Scorer = {
+  clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
+
+  volatility(vix) {
+    if (!vix) return { score: 50, details: {} };
+    const level      = this.clamp(100 - vix.price * 2.5, 0, 100);
+    const percentile = 100 - (vix.pct1yr ?? 50);
+    const slope      = vix.slope5 < 0 ? 70 : 30;
+    const score = Math.round(level * 0.5 + percentile * 0.3 + slope * 0.2);
+    return { score: this.clamp(score, 0, 100), details: { level, percentile, slope } };
+  },
+
+  trend(spy, qqq) {
+    if (!spy) return { score: 50, details: {} };
+    const above200 = spy.price > spy.ma200 ? 40 : 0;
+    const above50  = spy.price > spy.ma50  ? 30 : 0;
+    const above20  = spy.price > spy.ma20  ? 20 : 0;
+    const rsiPts   = this.clamp(((spy.rsi14 ?? 50) - 30) / 40 * 10, 0, 10);
+    const qqq50    = qqq && qqq.price > qqq.ma50 ? 0 : -5;
+    const score    = Math.round(above200 + above50 + above20 + rsiPts + qqq50);
+    const regime   = above200 && above50 ? 'UPTREND' : (!above200 ? 'DOWNTREND' : 'CHOP');
+    return { score: this.clamp(score, 0, 100), details: { above200: !!above200, above50: !!above50, above20: !!above20, regime } };
+  },
+
+  momentum(spy, qqq, sectors) {
+    const posCount = sectors.filter(s => (s.ret5d ?? 0) > 0).length;
+    const breadth  = (posCount / 11) * 50;
+    const rsiMom   = qqq ? this.clamp(((qqq.rsi14 ?? 50) - 40) / 30 * 30, 0, 30) : 15;
+    const rets     = sectors.map(s => s.ret5d ?? 0).sort((a, b) => b - a);
+    const top3Avg  = (rets[0] + rets[1] + rets[2]) / 3;
+    const bot3Avg  = (rets.at(-1) + rets.at(-2) + rets.at(-3)) / 3;
+    const spread   = top3Avg - bot3Avg;
+    const leadLag  = spread > 3 ? 20 : spread > 1 ? 10 : 5;
+    const score    = Math.round(breadth + rsiMom + leadLag);
+    return { score: this.clamp(score, 0, 100), details: { posCount, spread: spread.toFixed(1) } };
+  },
+
+  breadth(sectors) {
+    const above20 = sectors.filter(s => s.price > s.ma20).length;
+    const above50 = sectors.filter(s => s.price > s.ma50).length;
+    const s20     = (above20 / 11) * 100;
+    const s50     = (above50 / 11) * 100;
+    const score   = Math.round(s20 * 0.4 + s50 * 0.6);
+    return { score: this.clamp(score, 0, 100), details: { above20, above50 } };
+  },
+
+  macro(tny, dxy) {
+    const yieldTrend = tny && tny.slope5 > 0 ? 30 : 70;
+    const dxyTrend   = dxy && dxy.slope5 > 0 ? 30 : 70;
+    // Fed stance derived from 10Y level heuristic
+    const fedStance  = tny
+      ? (tny.price > 5 ? 'hawkish' : tny.price > 4 ? 'neutral' : 'dovish')
+      : 'neutral';
+    const fedScore   = { hawkish: 30, neutral: 60, dovish: 80 }[fedStance];
+    const score      = Math.round(yieldTrend * 0.35 + dxyTrend * 0.35 + fedScore * 0.30);
+    return { score: this.clamp(score, 0, 100), details: { yieldLevel: tny?.price?.toFixed(2), fedStance, dxyDir: dxy?.slope5 > 0 ? '↑' : '↓' } };
+  },
+
+  executionWindow(spy, qqq, vix, sectors) {
+    if (!spy) return 50;
+    const closeVsHigh = spy.high > 0 ? this.clamp((spy.price / spy.high) * 100, 0, 100) : 50;
+    const sectorCount = (sectors.filter(s => (s.ret5d ?? 0) > 0).length / 11) * 100;
+    const qqqRSI      = qqq ? this.clamp(qqq.rsi14 ?? 50, 0, 100) : 50;
+    const vixContract = vix && vix.slope5 < 0 ? 80 : 40;
+    const trendExt    = spy.ma20
+      ? this.clamp(100 - Math.abs((spy.price - spy.ma20) / spy.ma20 * 1000), 0, 100)
+      : 50;
+    return Math.round((closeVsHigh + sectorCount + qqqRSI + vixContract + trendExt) / 5);
+  },
+
+  compute(processed, mode) {
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+    const w = mode === 'day'
+      ? { volatility: 0.25, momentum: 0.30, trend: 0.15, breadth: 0.20, macro: 0.10 }
+      : CONFIG.weights;
+
+    const vol = this.volatility(vix);
+    const trd = this.trend(spy, qqq);
+    const mom = this.momentum(spy, qqq, sectors);
+    const brd = this.breadth(sectors);
+    const mac = this.macro(tny, dxy);
+
+    const mqs = Math.round(
+      vol.score * w.volatility +
+      mom.score * w.momentum  +
+      trd.score * w.trend     +
+      brd.score * w.breadth   +
+      mac.score * w.macro
+    );
+
+    const ews = this.executionWindow(spy, qqq, vix, sectors);
+
+    const decision = mqs >= CONFIG.thresholds.yes     ? 'YES'
+                   : mqs >= CONFIG.thresholds.caution ? 'CAUTION'
+                   : 'NO';
+
+    return { mqs, ews, decision, vol, trd, mom, brd, mac, weights: w };
+  }
+};
+
 // Placeholder — will be replaced in Tasks 3-10
 const App = { refresh() {}, setMode() {} };
 </script>
