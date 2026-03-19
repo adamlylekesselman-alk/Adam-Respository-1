@@ -608,6 +608,7 @@ const UIRenderer = {
     }
 
     function arcPath(fromDeg, toDeg, strokeColor, width, opacity) {
+      if (Math.abs(toDeg - fromDeg) < 0.01) return ''; // degenerate arc at value=0
       opacity = opacity ?? 1;
       const s = polar(fromDeg), e = polar(toDeg);
       const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
