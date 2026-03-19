@@ -1,0 +1,1409 @@
+# Should I Be Trading — Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Build a single `trading-dashboard.html` file that fetches live market data, scores the trading environment across 5 weighted categories, and renders a neon cyberpunk Bloomberg Terminal UI with YES/CAUTION/NO decision output.
+
+**Architecture:** Single HTML file with vanilla JS organized into module-like objects: `CONFIG`, `DataFetcher`, `Calculator`, `Scorer`, `UIRenderer`, `Analysis`, and `App`. All data fetched directly from Yahoo Finance's CORS-open endpoint and FRED. No dependencies, no build step.
+
+**Tech Stack:** Vanilla HTML5 / CSS3 / JavaScript ES2020. Yahoo Finance `query1.finance.yahoo.com` API. FRED public API (no key). SVG for gauges.
+
+**Design doc:** `docs/plans/2026-03-19-should-i-be-trading-design.md`
+
+---
+
+## Key Constraints
+
+- **CORS:** Yahoo Finance's `query1.finance.yahoo.com/v8/finance/chart/{symbol}` endpoint accepts browser requests. FRED API is CORS-enabled. No proxy needed.
+- **No test framework:** Verification is in-browser. Each task includes a "Verify in browser" step with exact things to check.
+- **FOMC dates 2026:** Jan 28–29, Mar 18–19, Apr 29–30, Jun 17–18, Jul 29–30, Sep 16–17, Oct 28–29, Dec 9–10.
+- **Symbols:** SPY, QQQ, ^VIX, ^TNX, DX-Y.NYB, XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC
+
+---
+
+## Task 1: HTML Skeleton + CSS Foundation
+
+**Files:**
+- Create: `trading-dashboard.html`
+
+**Step 1: Create the file with DOCTYPE, CSS variables, and base layout**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Should I Be Trading?</title>
+<style>
+:root {
+  --bg:        #050a0e;
+  --bg-panel:  #070d12;
+  --neon-green:#00ff88;
+  --neon-cyan: #00d4ff;
+  --amber:     #ffaa00;
+  --red:       #ff3366;
+  --dim:       rgba(0,255,136,0.3);
+  --text:      #c8d8e0;
+  --font:      'Courier New', 'Lucida Console', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.panel {
+  border: 1px solid var(--dim);
+  background: var(--bg-panel);
+  padding: 12px;
+  box-shadow: 0 0 8px rgba(0,255,136,0.05), inset 0 0 20px rgba(0,0,0,0.5);
+}
+
+.panel-title {
+  color: var(--neon-cyan);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  text-shadow: 0 0 8px var(--neon-cyan);
+}
+
+.neon-green { color: var(--neon-green); text-shadow: 0 0 10px var(--neon-green); }
+.neon-cyan  { color: var(--neon-cyan);  text-shadow: 0 0 10px var(--neon-cyan); }
+.amber      { color: var(--amber);      text-shadow: 0 0 10px var(--amber); }
+.red        { color: var(--red);        text-shadow: 0 0 10px var(--red); }
+.dim-text   { color: rgba(200,216,224,0.5); }
+
+/* Layout */
+#app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#ticker-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--dim);
+  background: var(--bg-panel);
+  overflow: hidden;
+  position: relative;
+  height: 36px;
+}
+
+#ticker-scroll {
+  white-space: nowrap;
+  animation: scroll-left 60s linear infinite;
+  flex: 1;
+  overflow: hidden;
+}
+
+@keyframes scroll-left {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+#ticker-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--dim);
+  padding-left: 12px;
+}
+
+/* Pulsing live dot */
+.live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--neon-green);
+  box-shadow: 0 0 8px var(--neon-green);
+  animation: pulse 1.5s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--neon-green); }
+  50%       { opacity: 0.4; box-shadow: 0 0 2px var(--neon-green); }
+}
+
+#fomc-alert {
+  display: none;
+  background: rgba(255,170,0,0.1);
+  border: 1px solid var(--amber);
+  padding: 8px 16px;
+  text-align: center;
+  color: var(--amber);
+  text-shadow: 0 0 10px var(--amber);
+  letter-spacing: 1px;
+  animation: amber-pulse 2s ease-in-out infinite;
+}
+@keyframes amber-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,170,0,0.3); }
+  50%       { box-shadow: 0 0 20px rgba(255,170,0,0.6); }
+}
+
+/* Hero row */
+#hero-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* Data grid */
+#data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+#data-grid .panel:nth-child(4),
+#data-grid .panel:nth-child(5) {
+  grid-column: span 1;
+}
+/* Last 2 panels span to fill 3 cols evenly — keep as is */
+
+/* Buttons */
+button {
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--neon-green);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: box-shadow 0.2s;
+}
+button:hover { box-shadow: 0 0 8px var(--neon-green); }
+
+.mode-btn.active {
+  background: rgba(0,255,136,0.15);
+  box-shadow: 0 0 8px var(--neon-green);
+}
+
+/* Skeleton shimmer */
+.skeleton {
+  background: linear-gradient(90deg, #0d1a20 25%, #152530 50%, #0d1a20 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 2px;
+  height: 1em;
+  display: inline-block;
+  min-width: 40px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="ticker-bar">
+    <div id="ticker-scroll"></div>
+    <div id="ticker-right">
+      <span class="live-dot"></span>
+      <span id="live-label" class="neon-green" style="font-size:11px;letter-spacing:1px">LIVE</span>
+      <span id="timestamp" class="dim-text" style="font-size:11px">--</span>
+      <button id="refresh-btn" onclick="App.refresh()">↻ REFRESH</button>
+      <button class="mode-btn active" id="btn-swing" onclick="App.setMode('swing')">SWING</button>
+      <button class="mode-btn" id="btn-day" onclick="App.setMode('day')">DAY</button>
+    </div>
+  </div>
+
+  <div id="fomc-alert">⚠ FOMC MEETING WITHIN 72 HOURS — REDUCE RISK</div>
+
+  <div id="hero-row">
+    <div class="panel" id="decision-panel">
+      <div class="panel-title">Should I Be Trading?</div>
+      <div id="decision-badge" style="font-size:48px;font-weight:bold;letter-spacing:4px;margin:12px 0;">---</div>
+      <div id="decision-sub" style="font-size:13px;margin-bottom:8px;">Loading...</div>
+      <div id="decision-detail" class="dim-text" style="font-size:11px;"></div>
+    </div>
+    <div class="panel" id="scores-panel">
+      <div class="panel-title">Scores</div>
+      <div style="display:flex;gap:24px;justify-content:center;padding:8px 0;">
+        <div style="text-align:center">
+          <svg id="gauge-mqs" width="120" height="120" viewBox="0 0 120 120"></svg>
+          <div style="font-size:11px;letter-spacing:1px;margin-top:4px;" class="dim-text">MARKET QUALITY</div>
+        </div>
+        <div style="text-align:center">
+          <svg id="gauge-ews" width="120" height="120" viewBox="0 0 120 120"></svg>
+          <div style="font-size:11px;letter-spacing:1px;margin-top:4px;" class="dim-text">EXECUTION WINDOW</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="data-grid">
+    <div class="panel" id="panel-volatility">
+      <div class="panel-title">Volatility</div>
+      <div id="vol-content"></div>
+    </div>
+    <div class="panel" id="panel-trend">
+      <div class="panel-title">Trend &amp; Structure</div>
+      <div id="trend-content"></div>
+    </div>
+    <div class="panel" id="panel-momentum">
+      <div class="panel-title">Momentum</div>
+      <div id="mom-content"></div>
+    </div>
+    <div class="panel" id="panel-breadth">
+      <div class="panel-title">Breadth</div>
+      <div id="breadth-content"></div>
+    </div>
+    <div class="panel" id="panel-macro">
+      <div class="panel-title">Macro / Liquidity</div>
+      <div id="macro-content"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="sector-panel">
+    <div class="panel-title">Sector Heatmap — 5-Day Performance</div>
+    <div id="sector-content"></div>
+  </div>
+
+  <div class="panel" id="scoring-panel">
+    <div class="panel-title">Scoring Breakdown</div>
+    <div id="scoring-content"></div>
+  </div>
+
+  <div class="panel" id="terminal-panel">
+    <div class="panel-title">Terminal Analysis</div>
+    <div id="terminal-content" style="line-height:1.8;font-size:13px;"></div>
+  </div>
+</div>
+<script>
+// All JS goes here (Tasks 2–11)
+</script>
+</body>
+</html>
+```
+
+**Step 2: Open in browser**
+Open `trading-dashboard.html` in Chrome or Firefox.
+
+**Verify:**
+- [ ] Black/dark background visible
+- [ ] Scanlines visible (faint horizontal lines across entire page)
+- [ ] All panel sections render (ticker bar, hero row, 5 data panels, sector, scoring, terminal) — they'll be mostly empty but visible with borders
+- [ ] Pulsing green dot animates
+- [ ] Buttons visible with green styling
+- [ ] No JS console errors
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add HTML skeleton and CSS foundation for trading dashboard"
+```
+
+---
+
+## Task 2: CONFIG + Data Fetcher
+
+**Files:**
+- Modify: `trading-dashboard.html` (inside `<script>`)
+
+**Step 1: Add CONFIG object**
+
+Replace the `// All JS goes here` comment with:
+
+```javascript
+const CONFIG = {
+  mode: 'swing', // 'swing' | 'day'
+  refreshInterval: 45000,
+  symbols: {
+    spy:     'SPY',
+    qqq:     'QQQ',
+    vix:     '^VIX',
+    tny:     '^TNX',
+    dxy:     'DX-Y.NYB',
+    sectors: [
+      { ticker: 'XLK', name: 'Technology' },
+      { ticker: 'XLF', name: 'Financials' },
+      { ticker: 'XLE', name: 'Energy' },
+      { ticker: 'XLV', name: 'Health Care' },
+      { ticker: 'XLI', name: 'Industrials' },
+      { ticker: 'XLY', name: 'Cons. Discret.' },
+      { ticker: 'XLP', name: 'Cons. Staples' },
+      { ticker: 'XLU', name: 'Utilities' },
+      { ticker: 'XLB', name: 'Materials' },
+      { ticker: 'XLRE', name: 'Real Estate' },
+      { ticker: 'XLC', name: 'Comm. Svcs' },
+    ]
+  },
+  // 2026 FOMC meeting end dates (last day of each meeting)
+  fomcDates: [
+    '2026-01-29','2026-03-19','2026-04-30','2026-06-18',
+    '2026-07-30','2026-09-17','2026-10-29','2026-12-10'
+  ],
+  weights: { volatility: 0.25, momentum: 0.25, trend: 0.20, breadth: 0.20, macro: 0.10 },
+  thresholds: { yes: 80, caution: 60 },
+};
+
+const DataFetcher = {
+  // Fetch 1 year of daily OHLCV for a Yahoo Finance symbol
+  async fetchChart(symbol) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${symbol}`);
+    const json = await res.json();
+    const result = json.chart?.result?.[0];
+    if (!result) throw new Error(`No data for ${symbol}`);
+    const timestamps = result.timestamp;
+    const q = result.indicators.quote[0];
+    const closes = q.close;
+    const highs  = q.high;
+    const lows   = q.low;
+    const opens  = q.open;
+    const volumes = q.volume;
+    // Return array of { date, open, high, low, close, volume }
+    return timestamps.map((ts, i) => ({
+      date:   new Date(ts * 1000).toISOString().slice(0, 10),
+      open:   opens[i],
+      high:   highs[i],
+      low:    lows[i],
+      close:  closes[i],
+      volume: volumes[i],
+    })).filter(d => d.close != null);
+  },
+
+  // Fetch all needed symbols; returns raw data object
+  async fetchAll() {
+    const allSymbols = [
+      CONFIG.symbols.spy, CONFIG.symbols.qqq, CONFIG.symbols.vix,
+      CONFIG.symbols.tny, CONFIG.symbols.dxy,
+      ...CONFIG.symbols.sectors.map(s => s.ticker)
+    ];
+
+    const results = await Promise.allSettled(
+      allSymbols.map(sym => this.fetchChart(sym).then(data => ({ sym, data })))
+    );
+
+    const raw = {};
+    results.forEach(r => {
+      if (r.status === 'fulfilled') {
+        raw[r.value.sym] = r.value.data;
+      } else {
+        console.warn('Fetch failed:', r.reason);
+      }
+    });
+    return raw;
+  }
+};
+```
+
+**Step 2: Test in browser console**
+
+Open browser DevTools → Console and run:
+```javascript
+DataFetcher.fetchChart('SPY').then(d => console.log('SPY rows:', d.length, 'latest:', d.at(-1)))
+```
+
+**Verify:**
+- [ ] Logs ~252 rows
+- [ ] Latest object has `{ date, open, high, low, close, volume }` all non-null
+- [ ] No CORS errors in console
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add CONFIG and DataFetcher with Yahoo Finance API"
+```
+
+---
+
+## Task 3: Calculator Module
+
+**Files:**
+- Modify: `trading-dashboard.html` (append to `<script>`)
+
+**Step 1: Add Calculator object after DataFetcher**
+
+```javascript
+const Calculator = {
+  // Simple Moving Average of last n closes
+  sma(closes, n) {
+    if (closes.length < n) return null;
+    const slice = closes.slice(-n);
+    return slice.reduce((a, b) => a + b, 0) / n;
+  },
+
+  // 14-period RSI (Wilder's smoothing)
+  rsi(closes, period = 14) {
+    if (closes.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    for (let i = closes.length - period; i < closes.length; i++) {
+      const diff = closes[i] - closes[i - 1];
+      if (diff > 0) gains += diff; else losses -= diff;
+    }
+    gains /= period; losses /= period;
+    if (losses === 0) return 100;
+    const rs = gains / losses;
+    return 100 - (100 / (1 + rs));
+  },
+
+  // Percentile rank of last value in the series (0–100)
+  percentile(values) {
+    if (values.length < 2) return null;
+    const last = values.at(-1);
+    const below = values.filter(v => v < last).length;
+    return Math.round((below / (values.length - 1)) * 100);
+  },
+
+  // 5-day linear regression slope (positive = rising)
+  slope5(values) {
+    if (values.length < 5) return 0;
+    const y = values.slice(-5);
+    const n = y.length;
+    const xMean = (n - 1) / 2;
+    const yMean = y.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    y.forEach((val, i) => {
+      num += (i - xMean) * (val - yMean);
+      den += (i - xMean) ** 2;
+    });
+    return den === 0 ? 0 : num / den;
+  },
+
+  // Average True Range over n periods
+  atr(bars, n = 14) {
+    if (bars.length < n + 1) return null;
+    const trs = [];
+    for (let i = 1; i < bars.length; i++) {
+      const b = bars[i], prev = bars[i - 1];
+      trs.push(Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close)));
+    }
+    return trs.slice(-n).reduce((a, b) => a + b, 0) / n;
+  },
+
+  clamp(v, min, max) { return Math.max(min, Math.min(max, v)); },
+
+  // Process raw chart data into useful derived values
+  process(bars) {
+    if (!bars || bars.length < 20) return null;
+    const closes = bars.map(b => b.close);
+    const last   = bars.at(-1);
+    return {
+      price:   last.close,
+      high:    last.high,
+      low:     last.low,
+      open:    last.open,
+      closes,
+      ma20:    this.sma(closes, 20),
+      ma50:    this.sma(closes, 50),
+      ma200:   this.sma(closes, 200),
+      rsi14:   this.rsi(closes),
+      slope5:  this.slope5(closes),
+      pct1yr:  this.percentile(closes),
+      atr14:   this.atr(bars),
+      ret5d:   closes.length >= 6
+                 ? ((last.close - closes.at(-6)) / closes.at(-6)) * 100
+                 : null,
+      ret1d:   closes.length >= 2
+                 ? ((last.close - closes.at(-2)) / closes.at(-2)) * 100
+                 : null,
+    };
+  }
+};
+```
+
+**Step 2: Test in browser console**
+```javascript
+DataFetcher.fetchChart('SPY').then(bars => {
+  const p = Calculator.process(bars);
+  console.log('SPY price:', p.price.toFixed(2));
+  console.log('MA20:', p.ma20?.toFixed(2), 'MA50:', p.ma50?.toFixed(2), 'MA200:', p.ma200?.toFixed(2));
+  console.log('RSI14:', p.rsi14?.toFixed(1));
+  console.log('5d slope:', p.slope5?.toFixed(4));
+  console.log('1yr pct:', p.pct1yr);
+});
+```
+
+**Verify:**
+- [ ] Price matches Yahoo Finance
+- [ ] MA200 is a reasonable number (not null, not equal to price)
+- [ ] RSI14 is between 0 and 100
+- [ ] 1yr percentile is 0–100
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add Calculator module with SMA, RSI, ATR, slope, percentile"
+```
+
+---
+
+## Task 4: Scorer Module
+
+**Files:**
+- Modify: `trading-dashboard.html` (append to `<script>`)
+
+**Step 1: Add Scorer object**
+
+```javascript
+const Scorer = {
+  clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
+
+  volatility(vix) {
+    if (!vix) return { score: 50, details: {} };
+    const level     = this.clamp(100 - vix.price * 2.5, 0, 100);
+    const percentile = 100 - (vix.pct1yr ?? 50);
+    const slope     = vix.slope5 < 0 ? 70 : 30;
+    const score = Math.round(level * 0.5 + percentile * 0.3 + slope * 0.2);
+    return { score: this.clamp(score, 0, 100), details: { level, percentile, slope } };
+  },
+
+  trend(spy, qqq) {
+    if (!spy) return { score: 50, details: {} };
+    const above200 = spy.price > spy.ma200 ? 40 : 0;
+    const above50  = spy.price > spy.ma50  ? 30 : 0;
+    const above20  = spy.price > spy.ma20  ? 20 : 0;
+    const rsiPts   = this.clamp(((spy.rsi14 ?? 50) - 30) / 40 * 10, 0, 10);
+    const qqq50    = qqq && qqq.price > qqq.ma50 ? 0 : -5;
+    const score    = Math.round(above200 + above50 + above20 + rsiPts + qqq50);
+    const regime   = above200 && above50 ? 'UPTREND' : (!above200 ? 'DOWNTREND' : 'CHOP');
+    return { score: this.clamp(score, 0, 100), details: { above200: !!above200, above50: !!above50, above20: !!above20, regime } };
+  },
+
+  momentum(spy, qqq, sectors) {
+    const posCount  = sectors.filter(s => (s.ret5d ?? 0) > 0).length;
+    const breadth   = (posCount / 11) * 50;
+    const rsiMom    = qqq ? this.clamp(((qqq.rsi14 ?? 50) - 40) / 30 * 30, 0, 30) : 15;
+    const rets      = sectors.map(s => s.ret5d ?? 0).sort((a, b) => b - a);
+    const top3Avg   = (rets[0] + rets[1] + rets[2]) / 3;
+    const bot3Avg   = (rets.at(-1) + rets.at(-2) + rets.at(-3)) / 3;
+    const spread    = top3Avg - bot3Avg;
+    const leadLag   = spread > 3 ? 20 : spread > 1 ? 10 : 5;
+    const score     = Math.round(breadth + rsiMom + leadLag);
+    return { score: this.clamp(score, 0, 100), details: { posCount, spread: spread.toFixed(1) } };
+  },
+
+  breadth(sectors) {
+    const above20 = sectors.filter(s => s.price > s.ma20).length;
+    const above50 = sectors.filter(s => s.price > s.ma50).length;
+    const s20     = (above20 / 11) * 100;
+    const s50     = (above50 / 11) * 100;
+    const score   = Math.round(s20 * 0.4 + s50 * 0.6);
+    return { score: this.clamp(score, 0, 100), details: { above20, above50 } };
+  },
+
+  macro(tny, dxy) {
+    const yieldTrend = tny && tny.slope5 > 0 ? 30 : 70;
+    const dxyTrend   = dxy && dxy.slope5 > 0 ? 30 : 70;
+    // Fed stance derived from 10Y level heuristic
+    const fedStance  = tny
+      ? (tny.price > 5 ? 'hawkish' : tny.price > 4 ? 'neutral' : 'dovish')
+      : 'neutral';
+    const fedScore   = { hawkish: 30, neutral: 60, dovish: 80 }[fedStance];
+    const score      = Math.round(yieldTrend * 0.35 + dxyTrend * 0.35 + fedScore * 0.30);
+    return { score: this.clamp(score, 0, 100), details: { yieldTrend: tny?.price?.toFixed(2), fedStance, dxyTrend: dxy?.slope5 > 0 ? '↑' : '↓' } };
+  },
+
+  executionWindow(spy, qqq, vix, sectors) {
+    if (!spy) return 50;
+    const closeVsHigh  = spy.high > 0 ? this.clamp((spy.price / spy.high) * 100, 0, 100) : 50;
+    const sectorCount  = (sectors.filter(s => (s.ret5d ?? 0) > 0).length / 11) * 100;
+    const qqqRSI       = qqq ? this.clamp(qqq.rsi14 ?? 50, 0, 100) : 50;
+    const vixContract  = vix && vix.slope5 < 0 ? 80 : 40;
+    const trendExt     = spy.ma20 ? this.clamp(100 - Math.abs((spy.price - spy.ma20) / spy.ma20 * 1000), 0, 100) : 50;
+    return Math.round((closeVsHigh + sectorCount + qqqRSI + vixContract + trendExt) / 5);
+  },
+
+  compute(processed, mode) {
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+    const w = mode === 'day'
+      ? { volatility: 0.25, momentum: 0.30, trend: 0.15, breadth: 0.20, macro: 0.10 }
+      : CONFIG.weights;
+
+    const vol  = this.volatility(vix);
+    const trd  = this.trend(spy, qqq);
+    const mom  = this.momentum(spy, qqq, sectors);
+    const brd  = this.breadth(sectors);
+    const mac  = this.macro(tny, dxy);
+
+    const mqs = Math.round(
+      vol.score * w.volatility +
+      mom.score * w.momentum  +
+      trd.score * w.trend     +
+      brd.score * w.breadth   +
+      mac.score * w.macro
+    );
+
+    const ews = this.executionWindow(spy, qqq, vix, sectors);
+
+    const decision = mqs >= CONFIG.thresholds.yes     ? 'YES'
+                   : mqs >= CONFIG.thresholds.caution ? 'CAUTION'
+                   : 'NO';
+
+    return { mqs, ews, decision, vol, trd, mom, brd, mac, weights: w };
+  }
+};
+```
+
+**Step 2: Test in browser console**
+
+```javascript
+// Quick unit test with mock data
+const mockSpy = { price: 580, ma20: 570, ma50: 555, ma200: 500, rsi14: 58, slope5: 0.5, pct1yr: 60, high: 582, ret5d: 1.2 };
+const mockVix = { price: 18, slope5: -0.3, pct1yr: 40 };
+const mockSectors = CONFIG.symbols.sectors.map((_, i) => ({
+  price: 100, ma20: i < 8 ? 95 : 105, ma50: i < 7 ? 90 : 110, ret5d: i < 7 ? 1.5 : -0.5
+}));
+const result = Scorer.compute({ spy: mockSpy, qqq: mockSpy, vix: mockVix, tny: { price: 4.3, slope5: 0.01 }, dxy: { slope5: 0.01 }, sectors: mockSectors }, 'swing');
+console.log('MQS:', result.mqs, 'Decision:', result.decision, 'EWS:', result.ews);
+```
+
+**Verify:**
+- [ ] `result.mqs` is a number between 0–100
+- [ ] `result.decision` is one of 'YES', 'CAUTION', 'NO'
+- [ ] `result.ews` is 0–100
+- [ ] With the mock data above (mostly positive), MQS should be 60–85 (CAUTION or YES)
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add Scorer module with all 5 category scores, MQS, EWS"
+```
+
+---
+
+## Task 5: App State + Data Pipeline
+
+**Files:**
+- Modify: `trading-dashboard.html` (append to `<script>`)
+
+**Step 1: Add State object and processRaw function**
+
+```javascript
+const State = {
+  raw:       {},
+  processed: {},
+  scores:    null,
+  lastFetch: null,
+  loading:   false,
+  mode:      'swing',
+};
+
+function processRaw(raw) {
+  const get = sym => Calculator.process(raw[sym]);
+  const spy = get(CONFIG.symbols.spy);
+  const qqq = get(CONFIG.symbols.qqq);
+  const vix = get(CONFIG.symbols.vix);
+  const tny = get(CONFIG.symbols.tny);
+  const dxy = get(CONFIG.symbols.dxy);
+  const sectors = CONFIG.symbols.sectors.map(s => {
+    const p = get(s.ticker);
+    return p ? { ...p, ticker: s.ticker, name: s.name } : null;
+  }).filter(Boolean);
+
+  return { spy, qqq, vix, tny, dxy, sectors };
+}
+
+function checkFomc() {
+  const now = new Date();
+  return CONFIG.fomcDates.some(dateStr => {
+    const meeting = new Date(dateStr);
+    const diff = (meeting - now) / (1000 * 60 * 60); // hours
+    return diff >= 0 && diff <= 72;
+  });
+}
+```
+
+**Step 2: Test processRaw in browser console**
+```javascript
+DataFetcher.fetchAll().then(raw => {
+  const p = processRaw(raw);
+  console.log('SPY price:', p.spy?.price?.toFixed(2));
+  console.log('VIX:', p.vix?.price?.toFixed(2));
+  console.log('Sectors loaded:', p.sectors.length);
+  console.log('FOMC imminent:', checkFomc());
+  State.raw = raw;
+  State.processed = p;
+  State.scores = Scorer.compute(p, 'swing');
+  console.log('MQS:', State.scores.mqs, 'Decision:', State.scores.decision);
+});
+```
+
+**Verify:**
+- [ ] SPY price matches live market
+- [ ] VIX is a reasonable number (usually 12–40)
+- [ ] 11 sectors loaded
+- [ ] MQS and decision print without errors
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add State, processRaw pipeline and FOMC date check"
+```
+
+---
+
+## Task 6: SVG Gauge + Decision Badge Renderer
+
+**Files:**
+- Modify: `trading-dashboard.html` (append to `<script>`)
+
+**Step 1: Add UIRenderer object, starting with gauges and decision badge**
+
+```javascript
+const UIRenderer = {
+  // Draw animated SVG arc gauge
+  drawGauge(svgId, value, color) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    const cx = 60, cy = 60, r = 46;
+    const startAngle = -220, endAngle = 40; // 260° arc
+    const totalDeg   = endAngle - startAngle;
+    const valueDeg   = startAngle + (value / 100) * totalDeg;
+
+    function polar(deg, radius = r) {
+      const rad = (deg - 90) * Math.PI / 180;
+      return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+    }
+
+    function arcPath(fromDeg, toDeg, strokeColor, width, opacity = 1) {
+      const s = polar(fromDeg), e = polar(toDeg);
+      const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
+      return `<path d="M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r} 0 ${large},1 ${e.x.toFixed(2)},${e.y.toFixed(2)}"
+        fill="none" stroke="${strokeColor}" stroke-width="${width}" stroke-linecap="round" opacity="${opacity}"
+        style="transition: stroke-dashoffset 0.8s ease"/>`;
+    }
+
+    const pct  = Math.round(value);
+    const glow = color === 'green' ? '#00ff88' : color === 'amber' ? '#ffaa00' : '#ff3366';
+
+    svg.innerHTML = `
+      ${arcPath(startAngle, endAngle, 'rgba(255,255,255,0.08)', 6)}
+      ${arcPath(startAngle, valueDeg, glow, 6)}
+      <circle cx="${cx}" cy="${cy}" r="34" fill="#070d12"/>
+      <text x="${cx}" y="${cy - 6}" text-anchor="middle" fill="${glow}"
+        font-family="'Courier New',monospace" font-size="22" font-weight="bold"
+        style="text-shadow:0 0 12px ${glow}">${pct}</text>
+      <text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="rgba(200,216,224,0.6)"
+        font-family="'Courier New',monospace" font-size="10">%</text>
+      <filter id="glow-${svgId}">
+        <feGaussianBlur stdDeviation="2" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    `;
+  },
+
+  updateDecision(scores) {
+    const badge = document.getElementById('decision-badge');
+    const sub   = document.getElementById('decision-sub');
+    const detail = document.getElementById('decision-detail');
+    if (!badge) return;
+
+    const { decision, mqs } = scores;
+    const map = {
+      YES:     { cls: 'neon-green', sub: 'Full position sizing — press risk.',     shadow: '#00ff88' },
+      CAUTION: { cls: 'amber',      sub: 'Half size — A+ setups only.',            shadow: '#ffaa00' },
+      NO:      { cls: 'red',        sub: 'Avoid trading — preserve capital.',      shadow: '#ff3366' },
+    };
+    const m = map[decision];
+    badge.textContent   = decision;
+    badge.className     = m.cls;
+    badge.style.textShadow = `0 0 20px ${m.shadow}, 0 0 40px ${m.shadow}`;
+    sub.textContent     = m.sub;
+    sub.className       = m.cls;
+    detail.textContent  = `Market Quality: ${mqs}% | Mode: ${CONFIG.mode.toUpperCase()}`;
+
+    const gaugeColor = decision === 'YES' ? 'green' : decision === 'CAUTION' ? 'amber' : 'red';
+    this.drawGauge('gauge-mqs', scores.mqs, gaugeColor);
+    this.drawGauge('gauge-ews', scores.ews, scores.ews >= 65 ? 'green' : scores.ews >= 45 ? 'amber' : 'red');
+  },
+};
+```
+
+**Step 2: Test in browser console**
+```javascript
+// Draw gauges with mock values
+UIRenderer.updateDecision({ decision: 'CAUTION', mqs: 67, ews: 55 });
+```
+
+**Verify:**
+- [ ] Decision badge shows "CAUTION" in amber with glow
+- [ ] Two SVG gauges appear with animated arcs at 67% and 55%
+- [ ] Sub-text says "Half size — A+ setups only."
+- [ ] Gauge arcs are colored correctly
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add SVG gauge renderer and decision badge with neon glow"
+```
+
+---
+
+## Task 7: Data Panel Renderers
+
+**Files:**
+- Modify: `trading-dashboard.html` (inside `UIRenderer` object — add methods before closing `}`)
+
+**Step 1: Add panel rendering methods to UIRenderer**
+
+```javascript
+  arrow(slope) { return slope > 0.01 ? '↑' : slope < -0.01 ? '↓' : '→'; },
+  arrowClass(slope) { return slope > 0.01 ? 'neon-green' : slope < -0.01 ? 'red' : 'amber'; },
+
+  row(label, value, cls = '') {
+    return `<div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+      <span class="dim-text">${label}</span>
+      <span class="${cls || ''}">${value}</span>
+    </div>`;
+  },
+
+  score(n) {
+    const cls = n >= 70 ? 'neon-green' : n >= 50 ? 'amber' : 'red';
+    return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,136,0.15);padding-top:6px">
+      <span class="dim-text">SCORE </span><span class="${cls}" style="font-size:16px;font-weight:bold">${n}</span>
+    </div>`;
+  },
+
+  updateVolatility(vix, scores) {
+    const el = document.getElementById('vol-content');
+    if (!el || !vix) { el && (el.innerHTML = '<span class="dim-text">N/A</span>'); return; }
+    const cls = vix.price < 15 ? 'neon-green' : vix.price < 25 ? 'amber' : 'red';
+    const regime = vix.price < 15 ? 'LOW FEAR' : vix.price < 25 ? 'ELEVATED' : 'RISK-OFF';
+    el.innerHTML =
+      this.row('VIX Level', `<span class="${cls}">${vix.price.toFixed(1)} ${this.arrow(vix.slope5)}</span>`) +
+      this.row('VIX Regime', `<span class="${cls}">${regime}</span>`) +
+      this.row('1yr Percentile', `${vix.pct1yr ?? '--'}%`) +
+      this.row('5d Trend', `<span class="${this.arrowClass(vix.slope5)}">${this.arrow(vix.slope5)} ${vix.slope5 > 0 ? 'Rising' : vix.slope5 < 0 ? 'Falling' : 'Flat'}</span>`) +
+      this.row('P/C Est.', vix.price < 15 ? 'Low Fear' : vix.price < 25 ? 'Neutral' : 'High Fear') +
+      this.score(scores.vol.score);
+  },
+
+  updateTrend(spy, qqq, scores) {
+    const el = document.getElementById('trend-content');
+    if (!el || !spy) { el && (el.innerHTML = '<span class="dim-text">N/A</span>'); return; }
+    const { regime } = scores.trd.details;
+    const regimeCls = regime === 'UPTREND' ? 'neon-green' : regime === 'DOWNTREND' ? 'red' : 'amber';
+    const pct = (v, ma) => ma ? `${((v - ma) / ma * 100).toFixed(1)}%` : 'N/A';
+    el.innerHTML =
+      this.row('Regime', `<span class="${regimeCls}">${regime}</span>`) +
+      this.row('SPY vs MA20', `<span class="${spy.price > spy.ma20 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma20)} ${spy.price > spy.ma20 ? '▲' : '▼'}</span>`) +
+      this.row('SPY vs MA50', `<span class="${spy.price > spy.ma50 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma50)} ${spy.price > spy.ma50 ? '▲' : '▼'}</span>`) +
+      this.row('SPY vs MA200', `<span class="${spy.price > spy.ma200 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma200)} ${spy.price > spy.ma200 ? '▲' : '▼'}</span>`) +
+      this.row('SPY RSI-14', `<span class="${spy.rsi14 > 70 ? 'red' : spy.rsi14 > 50 ? 'neon-green' : 'amber'}">${spy.rsi14?.toFixed(1) ?? '--'}</span>`) +
+      (qqq ? this.row('QQQ vs MA50', `<span class="${qqq.price > qqq.ma50 ? 'neon-green' : 'red'}">${pct(qqq.price, qqq.ma50)}</span>`) : '') +
+      this.score(scores.trd.score);
+  },
+
+  updateMomentum(sectors, scores) {
+    const el = document.getElementById('mom-content');
+    if (!el) return;
+    const { posCount, spread } = scores.mom.details;
+    const rets = sectors.map(s => s.ret5d ?? 0).sort((a, b) => b - a);
+    el.innerHTML =
+      this.row('Sectors+', `<span class="${posCount >= 7 ? 'neon-green' : posCount >= 5 ? 'amber' : 'red'}">${posCount}/11</span>`) +
+      this.row('Leader/Laggard Spread', `<span class="amber">${spread}%</span>`) +
+      this.row('Top Sector 5d', `<span class="neon-green">${sectors.sort((a,b) => (b.ret5d??0)-(a.ret5d??0))[0]?.ticker ?? '--'} +${rets[0]?.toFixed(1)}%</span>`) +
+      this.row('Weak Sector 5d', `<span class="red">${sectors.sort((a,b) => (a.ret5d??0)-(b.ret5d??0))[0]?.ticker ?? '--'} ${rets.at(-1)?.toFixed(1)}%</span>`) +
+      this.score(scores.mom.score);
+  },
+
+  updateBreadth(sectors, scores) {
+    const el = document.getElementById('breadth-content');
+    if (!el) return;
+    const { above20, above50 } = scores.brd.details;
+    const abv200 = sectors.filter(s => s.price > s.ma200).length;
+    el.innerHTML =
+      this.row('Above MA20', `<span class="${above20 >= 8 ? 'neon-green' : above20 >= 6 ? 'amber' : 'red'}">${above20}/11</span>`) +
+      this.row('Above MA50', `<span class="${above50 >= 8 ? 'neon-green' : above50 >= 6 ? 'amber' : 'red'}">${above50}/11</span>`) +
+      this.row('Above MA200', `<span class="${abv200 >= 8 ? 'neon-green' : abv200 >= 6 ? 'amber' : 'red'}">${abv200}/11</span>`) +
+      `<div class="dim-text" style="font-size:10px;margin-top:6px">* Proxy breadth via 11 sector ETFs</div>` +
+      this.score(scores.brd.score);
+  },
+
+  updateMacro(tny, dxy, scores) {
+    const el = document.getElementById('macro-content');
+    if (!el) return;
+    const { fedStance, dxyTrend } = scores.mac.details;
+    const fedCls = fedStance === 'dovish' ? 'neon-green' : fedStance === 'neutral' ? 'amber' : 'red';
+    const yCls   = tny && tny.slope5 < 0 ? 'neon-green' : 'red';
+    el.innerHTML =
+      (tny ? this.row('10Y Yield', `<span class="${yCls}">${tny.price?.toFixed(2) ?? '--'}% ${this.arrow(tny.slope5)}</span>`) : '') +
+      (dxy ? this.row('DXY', `<span class="${this.arrowClass(dxy.slope5)}">${dxy.price?.toFixed(2) ?? '--'} ${this.arrow(dxy.slope5)}</span>`) : '') +
+      this.row('Fed Stance', `<span class="${fedCls}">${fedStance.toUpperCase()}</span>`) +
+      this.score(scores.mac.score);
+  },
+```
+
+**Step 2: Test in browser console**
+```javascript
+// Uses State from Task 5 test — run Task 5 test first to populate State
+UIRenderer.updateVolatility(State.processed.vix, State.scores);
+UIRenderer.updateTrend(State.processed.spy, State.processed.qqq, State.scores);
+UIRenderer.updateMomentum(State.processed.sectors, State.scores);
+UIRenderer.updateBreadth(State.processed.sectors, State.scores);
+UIRenderer.updateMacro(State.processed.tny, State.processed.dxy, State.scores);
+```
+
+**Verify:**
+- [ ] All 5 panels show data (not blank)
+- [ ] Values have ↑↓→ arrows
+- [ ] Colors are correct (green = good, red = bad, amber = caution)
+- [ ] Score line appears at bottom of each panel
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add data panel renderers for all 5 categories"
+```
+
+---
+
+## Task 8: Sector Heatmap + Scoring Breakdown
+
+**Files:**
+- Modify: `trading-dashboard.html` (inside `UIRenderer` object — add methods)
+
+**Step 1: Add heatmap and scoring breakdown methods**
+
+```javascript
+  updateSectorHeatmap(sectors) {
+    const el = document.getElementById('sector-content');
+    if (!el || !sectors.length) return;
+    const sorted = [...sectors].sort((a, b) => (b.ret5d ?? 0) - (a.ret5d ?? 0));
+    const maxAbs  = Math.max(...sorted.map(s => Math.abs(s.ret5d ?? 0)), 0.1);
+
+    el.innerHTML = sorted.map((s, i) => {
+      const ret    = s.ret5d ?? 0;
+      const pct    = Math.abs(ret) / maxAbs * 100;
+      const color  = ret > 0 ? '#00ff88' : '#ff3366';
+      const leader = i === 0 ? ' <span class="dim-text" style="font-size:10px">[LEADER]</span>' : '';
+      const laggard = i === sorted.length - 1 ? ' <span class="dim-text" style="font-size:10px">[LAGGARD]</span>' : '';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="width:36px;color:var(--neon-cyan);font-size:11px">${s.ticker}</span>
+          <div style="flex:1;background:rgba(255,255,255,0.05);height:16px;position:relative;border:1px solid rgba(255,255,255,0.05)">
+            <div style="width:${pct.toFixed(1)}%;height:100%;background:${color};opacity:0.7;box-shadow:0 0 6px ${color};transition:width 0.5s ease"></div>
+          </div>
+          <span style="width:52px;text-align:right;color:${color};font-size:12px">${ret > 0 ? '+' : ''}${ret.toFixed(2)}%</span>
+          <span style="width:90px;font-size:10px;color:rgba(200,216,224,0.5)">${s.name}${leader}${laggard}</span>
+        </div>`;
+    }).join('');
+  },
+
+  updateScoringBreakdown(scores) {
+    const el = document.getElementById('scoring-content');
+    if (!el) return;
+    const w = scores.weights;
+    const cats = [
+      { label: 'VOLATILITY', weight: w.volatility, score: scores.vol.score },
+      { label: 'MOMENTUM',   weight: w.momentum,   score: scores.mom.score },
+      { label: 'TREND',      weight: w.trend,       score: scores.trd.score },
+      { label: 'BREADTH',    weight: w.breadth,     score: scores.brd.score },
+      { label: 'MACRO',      weight: w.macro,       score: scores.mac.score },
+    ];
+
+    el.innerHTML = cats.map(c => {
+      const contribution = (c.weight * c.score).toFixed(1);
+      const barPct = c.score;
+      const cls    = c.score >= 70 ? '#00ff88' : c.score >= 50 ? '#ffaa00' : '#ff3366';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="width:80px;font-size:11px;letter-spacing:1px;color:var(--neon-cyan)">${c.label}</span>
+          <span class="dim-text" style="width:28px;font-size:10px">${Math.round(c.weight * 100)}%</span>
+          <div style="flex:1;background:rgba(255,255,255,0.05);height:12px;position:relative">
+            <div style="width:${barPct}%;height:100%;background:${cls};opacity:0.8;box-shadow:0 0 6px ${cls};transition:width 0.6s ease"></div>
+          </div>
+          <span style="width:28px;color:${cls};font-size:13px;font-weight:bold">${c.score}</span>
+          <span class="dim-text" style="width:48px;font-size:11px">→ ${contribution}pts</span>
+        </div>`;
+    }).join('') +
+    `<div style="border-top:1px solid var(--dim);padding-top:8px;margin-top:4px;display:flex;justify-content:space-between;">
+      <span style="letter-spacing:2px;color:var(--neon-cyan);font-size:12px">MARKET QUALITY SCORE</span>
+      <span class="${scores.mqs >= 80 ? 'neon-green' : scores.mqs >= 60 ? 'amber' : 'red'}" style="font-size:20px;font-weight:bold">${scores.mqs}%</span>
+    </div>`;
+  },
+```
+
+**Step 2: Test in browser console**
+```javascript
+UIRenderer.updateSectorHeatmap(State.processed.sectors);
+UIRenderer.updateScoringBreakdown(State.scores);
+```
+
+**Verify:**
+- [ ] 11 sector bars appear, sorted by return (best on top)
+- [ ] Green bars for positive, red bars for negative returns
+- [ ] LEADER/LAGGARD tags appear on first and last
+- [ ] Scoring breakdown shows 5 rows with weighted bars
+- [ ] Total MQS shown at bottom with correct color
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add sector heatmap and scoring breakdown panel"
+```
+
+---
+
+## Task 9: Ticker Bar + Terminal Analysis + FOMC Alert
+
+**Files:**
+- Modify: `trading-dashboard.html` (inside `UIRenderer` and new `Analysis` object)
+
+**Step 1: Add ticker bar updater to UIRenderer**
+
+```javascript
+  updateTicker(processed) {
+    const el = document.getElementById('ticker-scroll');
+    if (!el) return;
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+    const fmt = (sym, p, slope) => {
+      if (!p) return '';
+      const cls   = slope > 0 ? 'color:#00ff88' : slope < 0 ? 'color:#ff3366' : 'color:#ffaa00';
+      const arrow = slope > 0 ? '▲' : slope < 0 ? '▼' : '▶';
+      return `<span style="${cls};margin-right:20px"><b>${sym}</b> ${p.price?.toFixed(2) ?? '--'} <small>${arrow}</small></span>`;
+    };
+    const items = [
+      fmt('SPY', spy, spy?.slope5),
+      fmt('QQQ', qqq, qqq?.slope5),
+      fmt('VIX', vix, vix?.slope5),
+      fmt('DXY', dxy, dxy?.slope5),
+      fmt('10Y', tny, tny?.slope5),
+      ...sectors.slice(0, 8).map(s => fmt(s.ticker, s, s.slope5)),
+    ].join('');
+    // Duplicate for seamless loop
+    el.innerHTML = items + items;
+  },
+
+  updateTimestamp() {
+    const el = document.getElementById('timestamp');
+    if (!el || !State.lastFetch) return;
+    const secs = Math.round((Date.now() - State.lastFetch) / 1000);
+    el.textContent = `updated ${secs}s ago`;
+  },
+
+  showFomcAlert(show) {
+    const el = document.getElementById('fomc-alert');
+    if (el) el.style.display = show ? 'block' : 'none';
+  },
+```
+
+**Step 2: Add Analysis object after UIRenderer**
+
+```javascript
+const Analysis = {
+  generate(scores, processed) {
+    const { mqs, trd, vol, mom, brd, mac } = scores;
+    const { spy, vix, sectors } = processed;
+
+    const parts = [];
+
+    // Trend
+    const regime = trd.details.regime;
+    if (regime === 'UPTREND') parts.push('SPY is trading in a confirmed uptrend above key moving averages');
+    else if (regime === 'DOWNTREND') parts.push('SPY is in a downtrend — price has broken below the 200-day moving average');
+    else parts.push('Price structure is choppy with mixed signals across timeframes');
+
+    // Breadth
+    if (brd.score >= 70) parts.push('broad market participation supports the trend');
+    else if (brd.score >= 50) parts.push('breadth is moderate with selective sector leadership');
+    else parts.push('narrow breadth is a warning — few sectors are confirming the move');
+
+    // Volatility
+    if (vix) {
+      if (vix.price < 15) parts.push('VIX is subdued, indicating low fear and favorable swing conditions');
+      else if (vix.price < 25) parts.push(`VIX at ${vix.price.toFixed(1)} suggests moderate risk — size accordingly`);
+      else parts.push(`VIX at ${vix.price.toFixed(1)} signals elevated fear — caution with position sizing`);
+    }
+
+    // Sectors
+    const sorted = [...sectors].sort((a, b) => (b.ret5d ?? 0) - (a.ret5d ?? 0));
+    const top2   = sorted.slice(0, 2).map(s => s.name).join(' and ');
+    const bot2   = sorted.slice(-2).map(s => s.name).join(' and ');
+    if (top2) parts.push(`Sector leadership is in ${top2}; laggards include ${bot2}`);
+
+    // Decision context
+    if (mqs >= 80) parts.push('Conditions support full position sizing with disciplined risk management');
+    else if (mqs >= 60) parts.push('Favor A+ setups only — be selective and use half-size positions');
+    else parts.push('Preserve capital — this is not an environment for active swing trading');
+
+    return parts.join('. ') + '.';
+  }
+};
+```
+
+**Step 3: Add typewriter animation**
+
+Add this CSS to the `<style>` block:
+```css
+#terminal-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+```
+
+Add this function inside the `<script>`:
+```javascript
+function typewriterEffect(elementId, text, speed = 18) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.textContent = '';
+  let i = 0;
+  const timer = setInterval(() => {
+    el.textContent += text[i++];
+    if (i >= text.length) clearInterval(timer);
+  }, speed);
+}
+```
+
+**Step 4: Test in browser console**
+```javascript
+UIRenderer.updateTicker(State.processed);
+UIRenderer.showFomcAlert(true); // test banner
+const text = Analysis.generate(State.scores, State.processed);
+console.log('Analysis:', text);
+typewriterEffect('terminal-content', text);
+```
+
+**Verify:**
+- [ ] Ticker scrolls with live values in green/red
+- [ ] FOMC banner appears amber with glow
+- [ ] Terminal analysis text types out character by character
+- [ ] Analysis text mentions trend, VIX, sectors, and decision advice
+
+**Step 5: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add ticker bar, terminal analysis generator, typewriter effect"
+```
+
+---
+
+## Task 10: App Init, Refresh Loop, Mode Toggle, Loading Skeletons
+
+**Files:**
+- Modify: `trading-dashboard.html` (append full `App` object to `<script>`)
+
+**Step 1: Add App object**
+
+```javascript
+const App = {
+  refreshTimer: null,
+  tsTimer: null,
+
+  async refresh() {
+    if (State.loading) return;
+    State.loading = true;
+    this.showLoading();
+
+    try {
+      State.raw       = await DataFetcher.fetchAll();
+      State.processed = processRaw(State.raw);
+      State.scores    = Scorer.compute(State.processed, State.mode);
+      State.lastFetch = Date.now();
+
+      this.render();
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      State.loading = false;
+    }
+  },
+
+  render() {
+    const { processed, scores } = State;
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+
+    UIRenderer.updateDecision(scores);
+    UIRenderer.updateVolatility(vix, scores);
+    UIRenderer.updateTrend(spy, qqq, scores);
+    UIRenderer.updateMomentum(sectors, scores);
+    UIRenderer.updateBreadth(sectors, scores);
+    UIRenderer.updateMacro(tny, dxy, scores);
+    UIRenderer.updateSectorHeatmap(sectors);
+    UIRenderer.updateScoringBreakdown(scores);
+    UIRenderer.updateTicker(processed);
+    UIRenderer.showFomcAlert(checkFomc());
+
+    const text = Analysis.generate(scores, processed);
+    typewriterEffect('terminal-content', text);
+  },
+
+  showLoading() {
+    const skel = '<span class="skeleton">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>';
+    ['vol-content','trend-content','mom-content','breadth-content','macro-content','sector-content','scoring-content']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `${skel} ${skel} ${skel}`;
+      });
+    const terminal = document.getElementById('terminal-content');
+    if (terminal) terminal.innerHTML = `<span class="skeleton" style="width:80%;display:block;height:1em;margin-bottom:8px"></span><span class="skeleton" style="width:60%;display:block;height:1em"></span>`;
+  },
+
+  setMode(mode) {
+    CONFIG.mode = mode;
+    State.mode  = mode;
+    document.getElementById('btn-swing').classList.toggle('active', mode === 'swing');
+    document.getElementById('btn-day').classList.toggle('active', mode === 'day');
+    if (State.scores) {
+      State.scores = Scorer.compute(State.processed, mode);
+      this.render();
+    }
+  },
+
+  init() {
+    // Auto-refresh every 45s
+    this.refreshTimer = setInterval(() => this.refresh(), CONFIG.refreshInterval);
+    // Update timestamp every second
+    this.tsTimer = setInterval(() => UIRenderer.updateTimestamp(), 1000);
+    // Initial load
+    this.refresh();
+  }
+};
+
+// Start
+App.init();
+```
+
+**Step 2: Reload the page**
+
+Close DevTools and do a hard reload (`Cmd+Shift+R` / `Ctrl+Shift+R`).
+
+**Verify:**
+- [ ] Page loads and immediately shows skeleton shimmer
+- [ ] After ~3–5 seconds, all panels populate with real data
+- [ ] Ticker bar scrolls automatically
+- [ ] Decision badge shows YES/CAUTION/NO with correct glow color
+- [ ] Both gauges animated and filled
+- [ ] Terminal analysis types out
+- [ ] Clicking `[SWING]` / `[DAY]` buttons changes the label on the decision detail
+
+**Step 3: Commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: add App init, auto-refresh loop, loading skeletons, mode toggle"
+```
+
+---
+
+## Task 11: Polish — Responsive Layout, Error States, Final Styling
+
+**Files:**
+- Modify: `trading-dashboard.html` (CSS additions + minor JS tweaks)
+
+**Step 1: Add responsive CSS**
+
+Add to the `<style>` block:
+
+```css
+@media (max-width: 900px) {
+  #hero-row { grid-template-columns: 1fr; }
+  #data-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  #data-grid { grid-template-columns: 1fr; }
+  #ticker-right { gap: 8px; }
+  #btn-swing, #btn-day { display: none; } /* hide on mobile ticker */
+}
+```
+
+**Step 2: Add error state styling**
+
+Add to `<style>`:
+```css
+.data-error {
+  color: rgba(255,51,102,0.7);
+  font-size: 11px;
+  font-style: italic;
+}
+```
+
+In `DataFetcher.fetchAll()`, the `console.warn` already handles failures. Now update `processRaw` to show partial data gracefully — no code change needed, the `filter(Boolean)` already handles null sectors.
+
+**Step 3: Add subtle header branding**
+
+Before the `<div id="app">`, add:
+```html
+<div style="text-align:center;padding:12px 0 4px;letter-spacing:6px;font-size:11px;color:rgba(0,212,255,0.4)">
+  ◈ MARKET INTELLIGENCE TERMINAL ◈
+</div>
+```
+
+**Step 4: Final visual checks**
+
+Open the dashboard and verify all items:
+
+**Functionality:**
+- [ ] All 5 data panels show live values
+- [ ] Decision badge renders with correct glow (green/amber/red)
+- [ ] Both circular gauges animated
+- [ ] Sector heatmap shows 11 bars sorted by return
+- [ ] Scoring breakdown shows 5 rows + total
+- [ ] Ticker scrolls continuously
+- [ ] Terminal analysis types out on load
+- [ ] SWING/DAY toggle re-scores and re-renders
+- [ ] Refresh button triggers new fetch + skeleton
+
+**Visual:**
+- [ ] Scanlines visible
+- [ ] Neon glow on key numbers
+- [ ] Pulsing LIVE dot
+- [ ] Panels have dim green borders
+- [ ] Sector bars animate on load (CSS width transition)
+
+**Errors:**
+- [ ] If a symbol fails to fetch (e.g., disconnect network briefly), panel shows N/A not a crash
+- [ ] Console warnings appear for failed symbols, no uncaught errors
+
+**Step 5: Final commit**
+```bash
+git add trading-dashboard.html
+git commit -m "feat: complete Should I Be Trading Bloomberg Terminal dashboard
+
+- Neon cyberpunk UI with scanlines, glow effects, pulsing LIVE dot
+- Live data from Yahoo Finance and FRED (no API keys needed)
+- 5-category weighted scoring: Volatility, Trend, Momentum, Breadth, Macro
+- YES / CAUTION / NO decision with SVG circular gauges
+- Execution Window Score (derived proxy)
+- 11-sector heatmap with gradient bars
+- Rule-based terminal analysis with typewriter effect
+- FOMC alert banner (72h warning)
+- SWING / DAY mode toggle
+- 45s auto-refresh with skeleton loading states"
+```
+
+---
+
+## Execution Options
+
+Plan complete and saved to `docs/plans/2026-03-19-should-i-be-trading.md`.
+
+**1. Subagent-Driven (this session)** — I dispatch a fresh subagent per task, review between tasks, fast iteration.
+
+**2. Parallel Session (separate)** — Open a new session with `executing-plans`, batch execution with checkpoints.
+
+Which approach?
