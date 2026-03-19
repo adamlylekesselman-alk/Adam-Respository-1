@@ -593,6 +593,71 @@ function checkFomc() {
   });
 }
 
+const UIRenderer = {
+  // Draw animated SVG arc gauge
+  drawGauge(svgId, value, color) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    const cx = 60, cy = 60, r = 46;
+    const startAngle = -220, endAngle = 40; // 260° arc
+
+    function polar(deg, radius) {
+      radius = radius ?? r;
+      const rad = (deg - 90) * Math.PI / 180;
+      return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+    }
+
+    function arcPath(fromDeg, toDeg, strokeColor, width, opacity) {
+      opacity = opacity ?? 1;
+      const s = polar(fromDeg), e = polar(toDeg);
+      const large = Math.abs(toDeg - fromDeg) > 180 ? 1 : 0;
+      return `<path d="M${s.x.toFixed(2)},${s.y.toFixed(2)} A${r},${r} 0 ${large},1 ${e.x.toFixed(2)},${e.y.toFixed(2)}"
+        fill="none" stroke="${strokeColor}" stroke-width="${width}" stroke-linecap="round" opacity="${opacity}"
+        style="transition: stroke-dashoffset 0.8s ease"/>`;
+    }
+
+    const totalDeg = endAngle - startAngle; // 260°
+    const valueDeg = startAngle + (value / 100) * totalDeg;
+    const pct      = Math.round(value);
+    const glow     = color === 'green' ? '#00ff88' : color === 'amber' ? '#ffaa00' : '#ff3366';
+
+    svg.innerHTML = `
+      ${arcPath(startAngle, endAngle, 'rgba(255,255,255,0.08)', 6)}
+      ${arcPath(startAngle, valueDeg, glow, 6)}
+      <circle cx="${cx}" cy="${cy}" r="34" fill="#070d12"/>
+      <text x="${cx}" y="${cy - 6}" text-anchor="middle" fill="${glow}"
+        font-family="'Courier New',monospace" font-size="22" font-weight="bold">${pct}</text>
+      <text x="${cx}" y="${cy + 12}" text-anchor="middle" fill="rgba(200,216,224,0.6)"
+        font-family="'Courier New',monospace" font-size="10">%</text>
+    `;
+  },
+
+  updateDecision(scores) {
+    const badge  = document.getElementById('decision-badge');
+    const sub    = document.getElementById('decision-sub');
+    const detail = document.getElementById('decision-detail');
+    if (!badge) return;
+
+    const { decision, mqs } = scores;
+    const map = {
+      YES:     { cls: 'neon-green', sub: 'Full position sizing — press risk.',   shadow: '#00ff88' },
+      CAUTION: { cls: 'amber',      sub: 'Half size — A+ setups only.',          shadow: '#ffaa00' },
+      NO:      { cls: 'red',        sub: 'Avoid trading — preserve capital.',    shadow: '#ff3366' },
+    };
+    const m = map[decision];
+    badge.textContent      = decision;
+    badge.className        = m.cls;
+    badge.style.textShadow = `0 0 20px ${m.shadow}, 0 0 40px ${m.shadow}`;
+    sub.textContent        = m.sub;
+    sub.className          = m.cls;
+    detail.textContent     = `Market Quality: ${mqs}% | Mode: ${CONFIG.mode.toUpperCase()}`;
+
+    const gaugeColor = decision === 'YES' ? 'green' : decision === 'CAUTION' ? 'amber' : 'red';
+    this.drawGauge('gauge-mqs', scores.mqs, gaugeColor);
+    this.drawGauge('gauge-ews', scores.ews, scores.ews >= 65 ? 'green' : scores.ews >= 45 ? 'amber' : 'red');
+  },
+};
+
 // Placeholder — will be replaced in Tasks 3-10
 const App = { refresh() {}, setMode() {} };
 </script>
