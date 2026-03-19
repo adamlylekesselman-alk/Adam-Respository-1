@@ -903,8 +903,79 @@ function typewriterEffect(elementId, text, speed) {
   }, speed);
 }
 
-// Placeholder — will be replaced in Tasks 3-10
-const App = { refresh() {}, setMode() {} };
+const App = {
+  refreshTimer: null,
+  tsTimer: null,
+
+  async refresh() {
+    if (State.loading) return;
+    State.loading = true;
+    this.showLoading();
+
+    try {
+      State.raw       = await DataFetcher.fetchAll();
+      State.processed = processRaw(State.raw);
+      State.scores    = Scorer.compute(State.processed, State.mode);
+      State.lastFetch = Date.now();
+      this.render();
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      State.loading = false;
+    }
+  },
+
+  render() {
+    const { processed, scores } = State;
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+
+    UIRenderer.updateDecision(scores);
+    UIRenderer.updateVolatility(vix, scores);
+    UIRenderer.updateTrend(spy, qqq, scores);
+    UIRenderer.updateMomentum(sectors, scores);
+    UIRenderer.updateBreadth(sectors, scores);
+    UIRenderer.updateMacro(tny, dxy, scores);
+    UIRenderer.updateSectorHeatmap(sectors);
+    UIRenderer.updateScoringBreakdown(scores);
+    UIRenderer.updateTicker(processed);
+    UIRenderer.showFomcAlert(checkFomc());
+
+    const text = Analysis.generate(scores, processed);
+    typewriterEffect('terminal-content', text);
+  },
+
+  showLoading() {
+    const skel = '<span class="skeleton">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>';
+    ['vol-content','trend-content','mom-content','breadth-content','macro-content','sector-content','scoring-content']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `${skel} ${skel} ${skel}`;
+      });
+    const terminal = document.getElementById('terminal-content');
+    if (terminal) terminal.innerHTML =
+      `<span class="skeleton" style="width:80%;display:block;height:1em;margin-bottom:8px"></span>` +
+      `<span class="skeleton" style="width:60%;display:block;height:1em"></span>`;
+  },
+
+  setMode(mode) {
+    CONFIG.mode = mode;
+    State.mode  = mode;
+    document.getElementById('btn-swing').classList.toggle('active', mode === 'swing');
+    document.getElementById('btn-day').classList.toggle('active', mode === 'day');
+    if (State.scores && State.processed) {
+      State.scores = Scorer.compute(State.processed, mode);
+      this.render();
+    }
+  },
+
+  init() {
+    this.refreshTimer = setInterval(() => this.refresh(), CONFIG.refreshInterval);
+    this.tsTimer      = setInterval(() => UIRenderer.updateTimestamp(), 1000);
+    this.refresh();
+  }
+};
+
+App.init();
 </script>
 </body>
 </html>
