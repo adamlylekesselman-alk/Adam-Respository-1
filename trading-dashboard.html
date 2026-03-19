@@ -88,11 +88,12 @@ body::after {
   height: 36px;
 }
 
+/* JS must populate this element with content duplicated once (A+A)
+   so that translateX(-50%) returns to the visual start seamlessly. */
 #ticker-scroll {
   white-space: nowrap;
   animation: scroll-left 60s linear infinite;
   flex: 1;
-  overflow: hidden;
 }
 
 @keyframes scroll-left {
