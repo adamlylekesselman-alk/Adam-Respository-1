@@ -488,8 +488,8 @@ const Scorer = {
     const breadth  = (posCount / 11) * 50;
     const rsiMom   = qqq ? this.clamp(((qqq.rsi14 ?? 50) - 40) / 30 * 30, 0, 30) : 15;
     const rets     = sectors.map(s => s.ret5d ?? 0).sort((a, b) => b - a);
-    const top3Avg  = (rets[0] + rets[1] + rets[2]) / 3;
-    const bot3Avg  = (rets.at(-1) + rets.at(-2) + rets.at(-3)) / 3;
+    const top3Avg  = rets.length >= 3 ? (rets[0] + rets[1] + rets[2]) / 3 : (rets[0] ?? 0);
+    const bot3Avg  = rets.length >= 3 ? (rets.at(-1) + rets.at(-2) + rets.at(-3)) / 3 : (rets.at(-1) ?? 0);
     const spread   = top3Avg - bot3Avg;
     const leadLag  = spread > 3 ? 20 : spread > 1 ? 10 : 5;
     const score    = Math.round(breadth + rsiMom + leadLag);
@@ -526,7 +526,7 @@ const Scorer = {
     const trendExt    = spy.ma20
       ? this.clamp(100 - Math.abs((spy.price - spy.ma20) / spy.ma20 * 1000), 0, 100)
       : 50;
-    return Math.round((closeVsHigh + sectorCount + qqqRSI + vixContract + trendExt) / 5);
+    return this.clamp(Math.round((closeVsHigh + sectorCount + qqqRSI + vixContract + trendExt) / 5), 0, 100);
   },
 
   compute(processed, mode) {
