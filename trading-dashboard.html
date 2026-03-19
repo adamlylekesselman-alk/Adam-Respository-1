@@ -927,6 +927,7 @@ const App = {
 
   render() {
     const { processed, scores } = State;
+    if (!scores || !processed || !processed.sectors) return;
     const { spy, qqq, vix, tny, dxy, sectors } = processed;
 
     UIRenderer.updateDecision(scores);
