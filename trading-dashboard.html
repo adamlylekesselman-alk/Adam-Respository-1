@@ -657,6 +657,164 @@ const UIRenderer = {
     this.drawGauge('gauge-mqs', scores.mqs, gaugeColor);
     this.drawGauge('gauge-ews', scores.ews, scores.ews >= 65 ? 'green' : scores.ews >= 45 ? 'amber' : 'red');
   },
+
+  arrow(slope) { return slope > 0.01 ? '↑' : slope < -0.01 ? '↓' : '→'; },
+  arrowClass(slope) { return slope > 0.01 ? 'neon-green' : slope < -0.01 ? 'red' : 'amber'; },
+
+  row(label, value, cls) {
+    cls = cls || '';
+    return `<div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+      <span class="dim-text">${label}</span>
+      <span class="${cls}">${value}</span>
+    </div>`;
+  },
+
+  scoreBar(n) {
+    const cls = n >= 70 ? 'neon-green' : n >= 50 ? 'amber' : 'red';
+    return `<div style="margin-top:8px;border-top:1px solid rgba(0,255,136,0.15);padding-top:6px">
+      <span class="dim-text">SCORE </span><span class="${cls}" style="font-size:16px;font-weight:bold">${n}</span>
+    </div>`;
+  },
+
+  updateVolatility(vix, scores) {
+    const el = document.getElementById('vol-content');
+    if (!el) return;
+    if (!vix) { el.innerHTML = '<span class="dim-text">N/A</span>'; return; }
+    const cls    = vix.price < 15 ? 'neon-green' : vix.price < 25 ? 'amber' : 'red';
+    const regime = vix.price < 15 ? 'LOW FEAR' : vix.price < 25 ? 'ELEVATED' : 'RISK-OFF';
+    el.innerHTML =
+      this.row('VIX Level',     `<span class="${cls}">${vix.price.toFixed(1)} ${this.arrow(vix.slope5)}</span>`) +
+      this.row('VIX Regime',    `<span class="${cls}">${regime}</span>`) +
+      this.row('1yr Percentile',`${vix.pct1yr ?? '--'}%`) +
+      this.row('5d Trend',      `<span class="${this.arrowClass(vix.slope5)}">${this.arrow(vix.slope5)} ${vix.slope5 > 0 ? 'Rising' : vix.slope5 < 0 ? 'Falling' : 'Flat'}</span>`) +
+      this.row('P/C Est.',      vix.price < 15 ? 'Low Fear' : vix.price < 25 ? 'Neutral' : 'High Fear') +
+      this.scoreBar(scores.vol.score);
+  },
+
+  updateTrend(spy, qqq, scores) {
+    const el = document.getElementById('trend-content');
+    if (!el) return;
+    if (!spy) { el.innerHTML = '<span class="dim-text">N/A</span>'; return; }
+    const { regime } = scores.trd.details;
+    const regimeCls  = regime === 'UPTREND' ? 'neon-green' : regime === 'DOWNTREND' ? 'red' : 'amber';
+    const pct = (v, ma) => ma ? `${((v - ma) / ma * 100).toFixed(1)}%` : 'N/A';
+    el.innerHTML =
+      this.row('Regime',      `<span class="${regimeCls}">${regime}</span>`) +
+      this.row('SPY vs MA20', `<span class="${spy.price > spy.ma20 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma20)} ${spy.price > spy.ma20 ? '▲' : '▼'}</span>`) +
+      this.row('SPY vs MA50', `<span class="${spy.price > spy.ma50 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma50)} ${spy.price > spy.ma50 ? '▲' : '▼'}</span>`) +
+      this.row('SPY vs MA200',`<span class="${spy.price > spy.ma200 ? 'neon-green' : 'red'}">${pct(spy.price, spy.ma200)} ${spy.price > spy.ma200 ? '▲' : '▼'}</span>`) +
+      this.row('SPY RSI-14',  `<span class="${spy.rsi14 > 70 ? 'red' : spy.rsi14 > 50 ? 'neon-green' : 'amber'}">${spy.rsi14?.toFixed(1) ?? '--'}</span>`) +
+      (qqq ? this.row('QQQ vs MA50', `<span class="${qqq.price > qqq.ma50 ? 'neon-green' : 'red'}">${pct(qqq.price, qqq.ma50)}</span>`) : '') +
+      this.scoreBar(scores.trd.score);
+  },
+
+  updateMomentum(sectors, scores) {
+    const el = document.getElementById('mom-content');
+    if (!el) return;
+    const { posCount, spread } = scores.mom.details;
+    const sorted = [...sectors].sort((a, b) => (b.ret5d ?? 0) - (a.ret5d ?? 0));
+    el.innerHTML =
+      this.row('Sectors+', `<span class="${posCount >= 7 ? 'neon-green' : posCount >= 5 ? 'amber' : 'red'}">${posCount}/11</span>`) +
+      this.row('Leader/Laggard Spread', `<span class="amber">${spread}%</span>`) +
+      this.row('Top Sector 5d',  `<span class="neon-green">${sorted[0]?.ticker ?? '--'} ${sorted[0]?.ret5d > 0 ? '+' : ''}${sorted[0]?.ret5d?.toFixed(1) ?? '--'}%</span>`) +
+      this.row('Weak Sector 5d', `<span class="red">${sorted.at(-1)?.ticker ?? '--'} ${sorted.at(-1)?.ret5d?.toFixed(1) ?? '--'}%</span>`) +
+      this.scoreBar(scores.mom.score);
+  },
+
+  updateBreadth(sectors, scores) {
+    const el = document.getElementById('breadth-content');
+    if (!el) return;
+    const { above20, above50 } = scores.brd.details;
+    const abv200 = sectors.filter(s => s.price > s.ma200).length;
+    el.innerHTML =
+      this.row('Above MA20',  `<span class="${above20 >= 8 ? 'neon-green' : above20 >= 6 ? 'amber' : 'red'}">${above20}/11</span>`) +
+      this.row('Above MA50',  `<span class="${above50 >= 8 ? 'neon-green' : above50 >= 6 ? 'amber' : 'red'}">${above50}/11</span>`) +
+      this.row('Above MA200', `<span class="${abv200 >= 8 ? 'neon-green' : abv200 >= 6 ? 'amber' : 'red'}">${abv200}/11</span>`) +
+      `<div class="dim-text" style="font-size:10px;margin-top:6px">* Proxy breadth via 11 sector ETFs</div>` +
+      this.scoreBar(scores.brd.score);
+  },
+
+  updateMacro(tny, dxy, scores) {
+    const el = document.getElementById('macro-content');
+    if (!el) return;
+    const { fedStance, dxyDir } = scores.mac.details;
+    const fedCls = fedStance === 'dovish' ? 'neon-green' : fedStance === 'neutral' ? 'amber' : 'red';
+    const yCls   = tny && tny.slope5 < 0 ? 'neon-green' : 'red';
+    el.innerHTML =
+      (tny ? this.row('10Y Yield', `<span class="${yCls}">${tny.price?.toFixed(2) ?? '--'}% ${this.arrow(tny.slope5)}</span>`) : '') +
+      (dxy ? this.row('DXY',       `<span class="${this.arrowClass(dxy.slope5)}">${dxy.price?.toFixed(2) ?? '--'} ${this.arrow(dxy.slope5)}</span>`) : '') +
+      this.row('Fed Stance', `<span class="${fedCls}">${fedStance.toUpperCase()}</span>`) +
+      this.scoreBar(scores.mac.score);
+  },
+
+  updateSectorHeatmap(sectors) {
+    const el = document.getElementById('sector-content');
+    if (!el || !sectors.length) return;
+    const sorted = [...sectors].sort((a, b) => (b.ret5d ?? 0) - (a.ret5d ?? 0));
+    const maxAbs = Math.max(...sorted.map(s => Math.abs(s.ret5d ?? 0)), 0.1);
+
+    el.innerHTML = sorted.map((s, i) => {
+      const ret    = s.ret5d ?? 0;
+      const pct    = Math.abs(ret) / maxAbs * 100;
+      const color  = ret > 0 ? '#00ff88' : '#ff3366';
+      const leader  = i === 0 ? ' <span class="dim-text" style="font-size:10px">[LEADER]</span>' : '';
+      const laggard = i === sorted.length - 1 ? ' <span class="dim-text" style="font-size:10px">[LAGGARD]</span>' : '';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="width:36px;color:var(--neon-cyan);font-size:11px">${s.ticker}</span>
+          <div style="flex:1;background:rgba(255,255,255,0.05);height:16px;position:relative;border:1px solid rgba(255,255,255,0.05)">
+            <div style="width:${pct.toFixed(1)}%;height:100%;background:${color};opacity:0.7;box-shadow:0 0 6px ${color};transition:width 0.5s ease"></div>
+          </div>
+          <span style="width:52px;text-align:right;color:${color};font-size:12px">${ret > 0 ? '+' : ''}${ret.toFixed(2)}%</span>
+          <span style="width:90px;font-size:10px;color:rgba(200,216,224,0.5)">${s.name}${leader}${laggard}</span>
+        </div>`;
+    }).join('');
+  },
+
+  updateScoringBreakdown(scores) {
+    const el = document.getElementById('scoring-content');
+    if (!el) return;
+    const w = scores.weights;
+    const cats = [
+      { label: 'VOLATILITY', weight: w.volatility, score: scores.vol.score },
+      { label: 'MOMENTUM',   weight: w.momentum,   score: scores.mom.score },
+      { label: 'TREND',      weight: w.trend,       score: scores.trd.score },
+      { label: 'BREADTH',    weight: w.breadth,     score: scores.brd.score },
+      { label: 'MACRO',      weight: w.macro,       score: scores.mac.score },
+    ];
+
+    el.innerHTML = cats.map(c => {
+      const contribution = (c.weight * c.score).toFixed(1);
+      const barPct = c.score;
+      const cls    = c.score >= 70 ? '#00ff88' : c.score >= 50 ? '#ffaa00' : '#ff3366';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="width:80px;font-size:11px;letter-spacing:1px;color:var(--neon-cyan)">${c.label}</span>
+          <span class="dim-text" style="width:28px;font-size:10px">${Math.round(c.weight * 100)}%</span>
+          <div style="flex:1;background:rgba(255,255,255,0.05);height:12px;position:relative">
+            <div style="width:${barPct}%;height:100%;background:${cls};opacity:0.8;box-shadow:0 0 6px ${cls};transition:width 0.6s ease"></div>
+          </div>
+          <span style="width:28px;color:${cls};font-size:13px;font-weight:bold">${c.score}</span>
+          <span class="dim-text" style="width:48px;font-size:11px">→ ${contribution}pts</span>
+        </div>`;
+    }).join('') +
+    `<div style="border-top:1px solid var(--dim);padding-top:8px;margin-top:4px;display:flex;justify-content:space-between;">
+      <span style="letter-spacing:2px;color:var(--neon-cyan);font-size:12px">MARKET QUALITY SCORE</span>
+      <span class="${scores.mqs >= 80 ? 'neon-green' : scores.mqs >= 60 ? 'amber' : 'red'}" style="font-size:20px;font-weight:bold">${scores.mqs}%</span>
+    </div>`;
+  },
+
+  updateTimestamp() {
+    const el = document.getElementById('timestamp');
+    if (!el || !State.lastFetch) return;
+    const secs = Math.round((Date.now() - State.lastFetch) / 1000);
+    el.textContent = `updated ${secs}s ago`;
+  },
+
+  showFomcAlert(show) {
+    const el = document.getElementById('fomc-alert');
+    if (el) el.style.display = show ? 'block' : 'none';
+  },
 };
 
 // Placeholder — will be replaced in Tasks 3-10
