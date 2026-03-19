@@ -880,15 +880,26 @@ const Analysis = {
   }
 };
 
+const _typewriterTimers = {};
+
 function typewriterEffect(elementId, text, speed) {
   speed = speed ?? 18;
   const el = document.getElementById(elementId);
   if (!el) return;
+  if (!text) return; // guard against empty string writing "undefined"
+  // Cancel any prior interval for this element to prevent racing
+  if (_typewriterTimers[elementId]) {
+    clearInterval(_typewriterTimers[elementId]);
+    delete _typewriterTimers[elementId];
+  }
   el.textContent = '';
   let i = 0;
-  const timer = setInterval(() => {
+  _typewriterTimers[elementId] = setInterval(() => {
     el.textContent += text[i++];
-    if (i >= text.length) clearInterval(timer);
+    if (i >= text.length) {
+      clearInterval(_typewriterTimers[elementId]);
+      delete _typewriterTimers[elementId];
+    }
   }, speed);
 }
 
