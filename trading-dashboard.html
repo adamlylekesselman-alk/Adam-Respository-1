@@ -586,7 +586,8 @@ function processRaw(raw) {
 function checkFomc() {
   const now = new Date();
   return CONFIG.fomcDates.some(dateStr => {
-    const meeting = new Date(dateStr);
+    // Parse as UTC midnight then add 19h to approximate 2 PM ET (FOMC meeting end)
+    const meeting = new Date(new Date(dateStr).getTime() + 19 * 60 * 60 * 1000);
     const diff = (meeting - now) / (1000 * 60 * 60); // hours
     return diff >= 0 && diff <= 72;
   });
