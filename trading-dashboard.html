@@ -559,6 +559,39 @@ const Scorer = {
   }
 };
 
+const State = {
+  raw:       {},
+  processed: {},
+  scores:    null,
+  lastFetch: null,
+  loading:   false,
+  mode:      'swing',
+};
+
+function processRaw(raw) {
+  const get = sym => Calculator.process(raw[sym]);
+  const spy = get(CONFIG.symbols.spy);
+  const qqq = get(CONFIG.symbols.qqq);
+  const vix = get(CONFIG.symbols.vix);
+  const tny = get(CONFIG.symbols.tny);
+  const dxy = get(CONFIG.symbols.dxy);
+  const sectors = CONFIG.symbols.sectors.map(s => {
+    const p = get(s.ticker);
+    return p ? { ...p, ticker: s.ticker, name: s.name } : null;
+  }).filter(Boolean);
+
+  return { spy, qqq, vix, tny, dxy, sectors };
+}
+
+function checkFomc() {
+  const now = new Date();
+  return CONFIG.fomcDates.some(dateStr => {
+    const meeting = new Date(dateStr);
+    const diff = (meeting - now) / (1000 * 60 * 60); // hours
+    return diff >= 0 && diff <= 72;
+  });
+}
+
 // Placeholder — will be replaced in Tasks 3-10
 const App = { refresh() {}, setMode() {} };
 </script>
