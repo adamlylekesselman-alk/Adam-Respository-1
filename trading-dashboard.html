@@ -815,7 +815,82 @@ const UIRenderer = {
     const el = document.getElementById('fomc-alert');
     if (el) el.style.display = show ? 'block' : 'none';
   },
+
+  updateTicker(processed) {
+    const el = document.getElementById('ticker-scroll');
+    if (!el) return;
+    const { spy, qqq, vix, tny, dxy, sectors } = processed;
+    const fmt = (sym, p, slope) => {
+      if (!p) return '';
+      const color = slope > 0 ? '#00ff88' : slope < 0 ? '#ff3366' : '#ffaa00';
+      const arrow = slope > 0 ? '▲' : slope < 0 ? '▼' : '▶';
+      return `<span style="color:${color};margin-right:20px"><b>${sym}</b> ${p.price?.toFixed(2) ?? '--'} <small>${arrow}</small></span>`;
+    };
+    const items = [
+      fmt('SPY', spy, spy?.slope5),
+      fmt('QQQ', qqq, qqq?.slope5),
+      fmt('VIX', vix, vix?.slope5),
+      fmt('DXY', dxy, dxy?.slope5),
+      fmt('10Y', tny, tny?.slope5),
+      ...sectors.slice(0, 8).map(s => fmt(s.ticker, s, s.slope5)),
+    ].join('');
+    // Duplicate for seamless loop (translateX(-50%) returns to visual start)
+    el.innerHTML = items + items;
+  },
 };
+
+const Analysis = {
+  generate(scores, processed) {
+    const { mqs, trd, vol, mom, brd, mac } = scores;
+    const { spy, vix, sectors } = processed;
+    const parts = [];
+
+    // Trend
+    const regime = trd.details.regime;
+    if (regime === 'UPTREND')   parts.push('SPY is trading in a confirmed uptrend above key moving averages');
+    else if (regime === 'DOWNTREND') parts.push('SPY is in a downtrend — price has broken below the 200-day moving average');
+    else parts.push('Price structure is choppy with mixed signals across timeframes');
+
+    // Breadth
+    if (brd.score >= 70)      parts.push('broad market participation supports the trend');
+    else if (brd.score >= 50) parts.push('breadth is moderate with selective sector leadership');
+    else                       parts.push('narrow breadth is a warning — few sectors are confirming the move');
+
+    // Volatility
+    if (vix) {
+      if (vix.price < 15)      parts.push('VIX is subdued, indicating low fear and favorable swing conditions');
+      else if (vix.price < 25) parts.push(`VIX at ${vix.price.toFixed(1)} suggests moderate risk — size accordingly`);
+      else                      parts.push(`VIX at ${vix.price.toFixed(1)} signals elevated fear — caution with position sizing`);
+    }
+
+    // Sectors
+    const sorted = [...sectors].sort((a, b) => (b.ret5d ?? 0) - (a.ret5d ?? 0));
+    if (sorted.length >= 2) {
+      const top2 = sorted.slice(0, 2).map(s => s.name).join(' and ');
+      const bot2 = sorted.slice(-2).map(s => s.name).join(' and ');
+      parts.push(`Sector leadership is in ${top2}; laggards include ${bot2}`);
+    }
+
+    // Decision context
+    if (mqs >= 80)      parts.push('Conditions support full position sizing with disciplined risk management');
+    else if (mqs >= 60) parts.push('Favor A+ setups only — be selective and use half-size positions');
+    else                 parts.push('Preserve capital — this is not an environment for active swing trading');
+
+    return parts.join('. ') + '.';
+  }
+};
+
+function typewriterEffect(elementId, text, speed) {
+  speed = speed ?? 18;
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.textContent = '';
+  let i = 0;
+  const timer = setInterval(() => {
+    el.textContent += text[i++];
+    if (i >= text.length) clearInterval(timer);
+  }, speed);
+}
 
 // Placeholder — will be replaced in Tasks 3-10
 const App = { refresh() {}, setMode() {} };
