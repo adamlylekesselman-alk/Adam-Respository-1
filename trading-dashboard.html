@@ -395,16 +395,25 @@ const CONFIG = {
 
 /* ═══════════════════════════════════════════════════
    DATA FETCHER
-   — Stooq (direct) → Yahoo Finance (3 URLs) → CORS proxy
-   — Main symbols fetched sequentially to avoid rate limits
+   Strategy:
+   - ETFs (SPY, QQQ, sectors): Yahoo Finance primary — known to work
+   - Indices (^VIX, ^TNX, DX-Y.NYB): Stooq primary — Yahoo blocks these
+   - Fallback chain: primary → secondary → allorigins proxy → corsproxy
+   - Sectors fetched in small batches to avoid rate limiting
 ═══════════════════════════════════════════════════ */
 const DataFetcher = {
   delay(ms){ return new Promise(r=>setTimeout(r,ms)); },
 
+  // ETFs where Yahoo Finance works; indices where it doesn't
+  YAHOO_FIRST: new Set(['SPY','QQQ','XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC']),
+
   parseStooqCSV(text){
-    if(!text||text.length<30||text.trim().startsWith('<')||
-       text.includes('Brak')||text.includes('No data')||text.includes('<!'))
-      throw new Error('Stooq bad response');
+    if(!text||text.length<30||text.trim().startsWith('<')||text.includes('<!'))
+      throw new Error('Stooq returned HTML/empty');
+    // Check for known Stooq error strings (Polish and English)
+    const t2=text.slice(0,200);
+    if(t2.includes('Brak')||t2.includes('No data found'))
+      throw new Error('Stooq no data');
     const lines=text.trim().split('\n');
     if(lines.length<3) throw new Error('Stooq too few rows');
     const rows=lines.slice(1).map(l=>{
@@ -412,7 +421,7 @@ const DataFetcher = {
       return{date,open:+open,high:+high,low:+low,close:+close,volume:+(volume||0)};
     }).filter(r=>r.close&&!isNaN(r.close)&&r.close>0);
     if(rows.length<20) throw new Error(`Stooq only ${rows.length} rows`);
-    // Stooq returns newest-first; sort ascending so all time-series math is correct
+    // Stooq returns newest-first — sort ascending for correct time-series math
     rows.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     return rows;
   },
@@ -431,72 +440,88 @@ const DataFetcher = {
     return rows;
   },
 
+  async fetchYahoo(symbol){
+    const enc=encodeURIComponent(symbol);
+    // query1 and query2 are both tried; they have different server pools
+    for(const base of['query1','query2']){
+      try{
+        const url=`https://${base}.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`;
+        const r=await fetch(url,{headers:{Accept:'application/json'}});
+        if(r.ok) return this.parseYahooJSON(await r.json());
+      }catch{}
+    }
+    throw new Error('Yahoo failed');
+  },
+
   async fetchStooq(symbol){
     const s=CONFIG.stooqMap[symbol];
-    if(!s) throw new Error('no stooq symbol');
+    if(!s) throw new Error('no stooq mapping');
     const url=`https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d`;
     const r=await fetch(url);
-    if(!r.ok) throw new Error(`Stooq ${r.status}`);
+    if(!r.ok) throw new Error(`Stooq HTTP ${r.status}`);
     return this.parseStooqCSV(await r.text());
   },
 
-  async fetchYahoo(symbol){
-    const enc=encodeURIComponent(symbol);
-    const urls=[
-      `https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
-      `https://query2.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
-      `https://query2.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y&events=history`,
-    ];
-    for(const u of urls){
-      try{
-        const r=await fetch(u,{headers:{Accept:'application/json'}});
-        if(!r.ok) continue;
-        return this.parseYahooJSON(await r.json());
-      }catch{}
-    }
-    throw new Error('All Yahoo URLs failed');
-  },
-
-  async fetchWithProxy(symbol){
-    // corsproxy.io as last resort
+  async fetchViaProxy(symbol){
+    // Try two different free CORS proxies with Yahoo Finance as the target
     const enc=encodeURIComponent(symbol);
     const target=`https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`;
-    const url=`https://corsproxy.io/?url=${encodeURIComponent(target)}`;
-    try{
-      const r=await fetch(url);
-      if(!r.ok) throw new Error(`proxy ${r.status}`);
-      return this.parseYahooJSON(await r.json());
-    }catch(e){ throw new Error(`Proxy failed: ${e.message}`); }
+    const proxies=[
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+      `https://corsproxy.io/?url=${encodeURIComponent(target)}`,
+    ];
+    for(const url of proxies){
+      try{
+        const r=await fetch(url);
+        if(!r.ok) continue;
+        const text=await r.text();
+        // allorigins might wrap in JSON: {"contents":"...","status":{...}}
+        let json;
+        try{ json=JSON.parse(text); }catch{ throw new Error('non-JSON proxy response'); }
+        // Handle allorigins wrapper
+        if(json.contents) json=JSON.parse(json.contents);
+        return this.parseYahooJSON(json);
+      }catch{}
+    }
+    throw new Error('All proxies failed');
   },
 
   async fetchChart(symbol){
-    // Try Stooq, then Yahoo, then CORS proxy
-    const methods=[
-      ()=>this.fetchStooq(symbol),
-      ()=>this.fetchYahoo(symbol),
-      ()=>this.fetchWithProxy(symbol),
-    ];
-    let lastErr;
+    const errors=[];
+    // Choose strategy based on symbol type
+    const yahooFirst=this.YAHOO_FIRST.has(symbol);
+    const methods=yahooFirst
+      ?[()=>this.fetchYahoo(symbol), ()=>this.fetchStooq(symbol), ()=>this.fetchViaProxy(symbol)]
+      :[()=>this.fetchStooq(symbol), ()=>this.fetchViaProxy(symbol), ()=>this.fetchYahoo(symbol)];
     for(const fn of methods){
       try{ return await fn(); }
-      catch(e){ lastErr=e; }
+      catch(e){ errors.push(e.message); }
     }
-    throw lastErr;
+    console.warn(`[${symbol}] all sources failed:`,errors.join(' | '));
+    throw new Error(errors.at(-1));
   },
 
   async fetchAll(){
     const raw={};
-    // Fetch main symbols sequentially with small delays (avoids rate limiting)
-    const main=[CONFIG.symbols.spy,CONFIG.symbols.qqq,CONFIG.symbols.vix,CONFIG.symbols.tny,CONFIG.symbols.dxy];
-    for(const sym of main){
-      try{ raw[sym]=await this.fetchChart(sym); }
-      catch(e){ console.warn(`[${sym}] all sources failed:`,e.message); }
-      await this.delay(120);
+    // VIX / TNX / DXY first — sequential, these go to Stooq only
+    const indices=[CONFIG.symbols.vix, CONFIG.symbols.tny, CONFIG.symbols.dxy];
+    for(const sym of indices){
+      try{ raw[sym]=await this.fetchChart(sym); }catch{}
+      await this.delay(200);
     }
-    // Fetch sectors in parallel
+    // SPY + QQQ — Yahoo first, quick
+    for(const sym of[CONFIG.symbols.spy, CONFIG.symbols.qqq]){
+      try{ raw[sym]=await this.fetchChart(sym); }catch{}
+      await this.delay(150);
+    }
+    // Sectors — Yahoo first, batched 4 at a time to avoid rate limiting
     const secs=CONFIG.symbols.sectors.map(s=>s.ticker);
-    const results=await Promise.allSettled(secs.map(sym=>this.fetchChart(sym).then(d=>({sym,d}))));
-    results.forEach(r=>{ if(r.status==='fulfilled') raw[r.value.sym]=r.value.d; });
+    for(let i=0;i<secs.length;i+=4){
+      const batch=secs.slice(i,i+4);
+      const results=await Promise.allSettled(batch.map(sym=>this.fetchChart(sym).then(d=>({sym,d}))));
+      results.forEach(r=>{ if(r.status==='fulfilled') raw[r.value.sym]=r.value.d; });
+      if(i+4<secs.length) await this.delay(300); // pause between batches
+    }
     return raw;
   }
 };
