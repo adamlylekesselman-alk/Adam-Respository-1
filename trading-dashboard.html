@@ -381,7 +381,7 @@ const CONFIG = {
     ]
   },
   stooqMap:{
-    'SPY':'spy.us','QQQ':'qqq.us','^VIX':'vix','^TNX':'10ust.b','DX-Y.NYB':'usdx.f',
+    'SPY':'spy.us','QQQ':'qqq.us','^VIX':'vi.f','^TNX':'10yusy.b','DX-Y.NYB':'dx.f',
     'XLK':'xlk.us','XLF':'xlf.us','XLE':'xle.us','XLV':'xlv.us','XLI':'xli.us',
     'XLY':'xly.us','XLP':'xlp.us','XLU':'xlu.us','XLB':'xlb.us','XLRE':'xlre.us','XLC':'xlc.us',
   },
@@ -412,6 +412,8 @@ const DataFetcher = {
       return{date,open:+open,high:+high,low:+low,close:+close,volume:+(volume||0)};
     }).filter(r=>r.close&&!isNaN(r.close)&&r.close>0);
     if(rows.length<20) throw new Error(`Stooq only ${rows.length} rows`);
+    // Stooq returns newest-first; sort ascending so all time-series math is correct
+    rows.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     return rows;
   },
 
@@ -443,7 +445,7 @@ const DataFetcher = {
     const urls=[
       `https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
       `https://query2.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
-      `https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y&includePrePost=false`,
+      `https://query2.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y&events=history`,
     ];
     for(const u of urls){
       try{
@@ -459,7 +461,7 @@ const DataFetcher = {
     // corsproxy.io as last resort
     const enc=encodeURIComponent(symbol);
     const target=`https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`;
-    const url=`https://corsproxy.io/?${encodeURIComponent(target)}`;
+    const url=`https://corsproxy.io/?url=${encodeURIComponent(target)}`;
     try{
       const r=await fetch(url);
       if(!r.ok) throw new Error(`proxy ${r.status}`);
@@ -510,7 +512,7 @@ const Calc={
     for(let i=1;i<=p;i++){const d=c[i]-c[i-1];if(d>0)ag+=d;else al-=d;}
     ag/=p;al/=p;
     for(let i=p+1;i<c.length;i++){const d=c[i]-c[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;}
-    if(al===0) return 100;
+    if(al===0) return ag===0?50:100;
     return 100-(100/(1+ag/al));
   },
   percentile(v){ if(v.length<2) return null; const l=v.at(-1); return Math.round(v.filter(x=>x<l).length/(v.length-1)*100); },
@@ -545,16 +547,18 @@ const Scorer={
   },
   trend(spy,qqq){
     if(!spy) return{score:50,details:{}};
-    const a200=spy.price>(spy.ma200??0)?40:0, a50=spy.price>(spy.ma50??0)?30:0, a20=spy.price>(spy.ma20??0)?20:0;
+    // Use Infinity fallback: if MA unavailable, don't award points for being "above" it
+    const a200=spy.ma200&&spy.price>spy.ma200?40:0, a50=spy.ma50&&spy.price>spy.ma50?30:0, a20=spy.ma20&&spy.price>spy.ma20?20:0;
     const rsiPts=this.clamp(((spy.rsi14??50)-30)/40*10,0,10);
-    const q50=qqq&&qqq.price>(qqq.ma50??0)?0:-5;
+    const q50=qqq&&qqq.ma50&&qqq.price>qqq.ma50?0:-5;
     const score=Math.round(a200+a50+a20+rsiPts+q50);
     const regime=a200&&a50?'UPTREND':(!a200?'DOWNTREND':'CHOP');
     return{score:this.clamp(score,0,100),details:{a200:!!a200,a50:!!a50,a20:!!a20,regime,spy,qqq}};
   },
   momentum(spy,qqq,sectors){
+    const n=sectors.length||11;
     const pos=sectors.filter(s=>(s.ret5d??0)>0).length;
-    const brd=(pos/11)*50;
+    const brd=(pos/n)*50;
     const rsiMom=qqq?this.clamp(((qqq.rsi14??50)-40)/30*30,0,30):15;
     const rets=sectors.map(s=>s.ret5d??0).sort((a,b)=>b-a);
     const top=(rets.length>=3?(rets[0]+rets[1]+rets[2])/3:(rets[0]??0));
@@ -563,10 +567,11 @@ const Scorer={
     return{score:this.clamp(Math.round(brd+rsiMom+ll),0,100),details:{pos,spread:(top-bot).toFixed(1),qqq,sectors}};
   },
   breadth(sectors){
-    const a20=sectors.filter(s=>s.price>(s.ma20??Infinity)).length;
-    const a50=sectors.filter(s=>s.price>(s.ma50??Infinity)).length;
-    const a200=sectors.filter(s=>s.price>(s.ma200??Infinity)).length;
-    return{score:this.clamp(Math.round((a20/11*100)*.4+(a50/11*100)*.6),0,100),details:{a20,a50,a200}};
+    const n=sectors.length||11;
+    const a20=sectors.filter(s=>s.ma20&&s.price>s.ma20).length;
+    const a50=sectors.filter(s=>s.ma50&&s.price>s.ma50).length;
+    const a200=sectors.filter(s=>s.ma200&&s.price>s.ma200).length;
+    return{score:this.clamp(Math.round((a20/n*100)*.4+(a50/n*100)*.6),0,100),details:{a20,a50,a200,n}};
   },
   macro(tny,dxy){
     const yt=tny&&tny.slope5>0?30:70, dt=dxy&&dxy.slope5>0?30:70;
@@ -577,7 +582,7 @@ const Scorer={
   ews(spy,qqq,vix,sectors){
     if(!spy) return{score:50,items:{}};
     const cvh=spy.high>0?this.clamp((spy.price/spy.high)*100,0,100):50;
-    const sc=(sectors.filter(s=>(s.ret5d??0)>0).length/11)*100;
+    const sc=(sectors.filter(s=>(s.ret5d??0)>0).length/(sectors.length||11))*100;
     const qrsi=qqq?this.clamp(qqq.rsi14??50,0,100):50;
     const vc=vix&&vix.slope5<0?80:40;
     const te=spy.ma20?this.clamp(100-Math.abs((spy.price-spy.ma20)/spy.ma20*1000),0,100):50;
