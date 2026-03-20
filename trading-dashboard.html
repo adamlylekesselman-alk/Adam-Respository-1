@@ -23,7 +23,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: 14px;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -52,8 +52,8 @@ body::after {
 }
 
 .ptitle {
-  font-size: 9px;
-  letter-spacing: 2.5px;
+  font-size: 10px;
+  letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--cyan);
   text-shadow: 0 0 6px var(--cyan);
@@ -84,7 +84,7 @@ body::after {
 #ticker-scroll {
   white-space: nowrap;
   animation: ticker 70s linear infinite;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @keyframes ticker {
@@ -120,7 +120,7 @@ button {
   border: 1px solid var(--dim);
   color: var(--green);
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 11px;
   padding: 3px 9px;
   cursor: pointer;
   letter-spacing: 1px;
@@ -176,14 +176,14 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 #decision-word {
-  font-size: 52px;
+  font-size: 60px;
   font-weight: bold;
   letter-spacing: 3px;
   line-height: 1;
 }
 
 #decision-sub {
-  font-size: 11px;
+  font-size: 13px;
   margin-top: 6px;
   letter-spacing: .5px;
 }
@@ -204,7 +204,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 #gauge-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 2px;
   color: rgba(184,204,212,0.5);
   margin-top: 5px;
@@ -231,20 +231,20 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 .cat-score:last-child { border-right: none; }
 
 .cat-name {
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1.5px;
   color: rgba(184,204,212,0.5);
   text-transform: uppercase;
 }
 
 .cat-num {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: bold;
   line-height: 1;
 }
 
 .cat-wt {
-  font-size: 8px;
+  font-size: 10px;
   color: rgba(184,204,212,0.35);
 }
 
@@ -257,7 +257,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 .pos-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 2px;
   color: rgba(0,212,255,0.7);
   text-transform: uppercase;
@@ -265,13 +265,13 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 #pos-size {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: bold;
   letter-spacing: 1px;
 }
 
 #pos-hint {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 6px;
   color: rgba(184,204,212,0.5);
   line-height: 1.4;
@@ -285,7 +285,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 .dpanel {
-  padding: 12px;
+  padding: 16px;
 }
 
 /* Bullet rows */
@@ -294,7 +294,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
   align-items: baseline;
   gap: 6px;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .drow::before {
   content: '●';
@@ -309,9 +309,9 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 
 /* Tags */
 .tag {
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: .5px;
-  padding: 1px 5px;
+  padding: 2px 7px;
   border-radius: 1px;
   font-weight: bold;
   flex-shrink: 0;
@@ -322,8 +322,8 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 .tag-d { background: rgba(184,204,212,0.08); color: rgba(184,204,212,0.5); border: 1px solid rgba(184,204,212,0.15); }
 
 .panel-score-bar {
-  margin-top: 10px;
-  padding-top: 8px;
+  margin-top: 14px;
+  padding-top: 10px;
   border-top: 1px solid rgba(0,255,136,0.12);
   display: flex;
   align-items: center;
@@ -331,7 +331,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 .psbar-track {
   flex: 1;
-  height: 4px;
+  height: 7px;
   background: rgba(255,255,255,0.06);
   border-radius: 2px;
   overflow: hidden;
@@ -342,7 +342,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
   transition: width .7s ease;
 }
 .psbar-num {
-  font-size: 15px;
+  font-size: 20px;
   font-weight: bold;
   width: 28px;
   text-align: right;
@@ -356,7 +356,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 .bpanel {
-  padding: 14px;
+  padding: 18px;
 }
 
 /* Execution Window checklist */
@@ -365,12 +365,12 @@ button:hover { box-shadow: 0 0 8px var(--green); }
   align-items: center;
   gap: 8px;
   margin-bottom: 7px;
-  font-size: 11px;
+  font-size: 13px;
 }
 .ewcheck {
-  width: 14px; height: 14px;
+  width: 18px; height: 18px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px;
+  font-size: 12px;
   border: 1px solid;
   flex-shrink: 0;
 }
@@ -394,11 +394,11 @@ button:hover { box-shadow: 0 0 8px var(--green); }
   gap: 7px;
   margin-bottom: 5px;
 }
-.srow-ticker { width: 32px; font-size: 10px; color: var(--cyan); flex-shrink: 0; }
-.srow-name   { font-size: 10px; color: rgba(184,204,212,0.5); width: 100px; flex-shrink: 0; }
-.srow-bar    { flex: 1; height: 12px; background: rgba(255,255,255,0.05); position: relative; border: 1px solid rgba(255,255,255,0.04); overflow: hidden; }
+.srow-ticker { width: 32px; font-size: 12px; color: var(--cyan); flex-shrink: 0; }
+.srow-name   { font-size: 12px; color: rgba(184,204,212,0.5); width: 110px; flex-shrink: 0; }
+.srow-bar    { flex: 1; height: 16px; background: rgba(255,255,255,0.05); position: relative; border: 1px solid rgba(255,255,255,0.04); overflow: hidden; }
 .srow-fill   { height: 100%; transition: width .5s ease; }
-.srow-ret    { width: 48px; text-align: right; font-size: 11px; font-weight: bold; flex-shrink: 0; }
+.srow-ret    { width: 48px; text-align: right; font-size: 13px; font-weight: bold; flex-shrink: 0; }
 
 /* Scoring weights */
 .wrow {
@@ -407,11 +407,11 @@ button:hover { box-shadow: 0 0 8px var(--green); }
   gap: 8px;
   margin-bottom: 8px;
 }
-.wrow-name { font-size: 10px; letter-spacing: 1px; color: var(--cyan); width: 72px; flex-shrink: 0; }
-.wrow-pct  { font-size: 9px; color: rgba(184,204,212,0.4); width: 24px; flex-shrink: 0; }
-.wrow-bar  { flex: 1; height: 10px; background: rgba(255,255,255,0.05); position: relative; overflow: hidden; }
+.wrow-name { font-size: 12px; letter-spacing: 1px; color: var(--cyan); width: 80px; flex-shrink: 0; }
+.wrow-pct  { font-size: 11px; color: rgba(184,204,212,0.4); width: 28px; flex-shrink: 0; }
+.wrow-bar  { flex: 1; height: 14px; background: rgba(255,255,255,0.05); position: relative; overflow: hidden; }
 .wrow-fill { height: 100%; transition: width .7s ease; }
-.wrow-num  { font-size: 12px; font-weight: bold; width: 26px; text-align: right; flex-shrink: 0; }
+.wrow-num  { font-size: 15px; font-weight: bold; width: 26px; text-align: right; flex-shrink: 0; }
 
 #mqs-total {
   margin-top: 12px;
@@ -428,7 +428,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 #terminal-verdict {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: bold;
   letter-spacing: 1px;
   margin-bottom: 10px;
@@ -437,7 +437,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 }
 
 #terminal-body {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.9;
   color: var(--text);
   white-space: pre-wrap;
@@ -446,7 +446,7 @@ button:hover { box-shadow: 0 0 8px var(--green); }
 
 #terminal-suggest {
   margin-top: 10px;
-  font-size: 11px;
+  font-size: 13px;
   font-style: italic;
   color: rgba(184,204,212,0.5);
 }
@@ -657,7 +657,7 @@ const CONFIG = {
   },
   // Stooq symbol map
   stooqMap: {
-    'SPY':'spy.us','QQQ':'qqq.us','^VIX':'vix','^TNX':'10ust.b','DX-Y.NYB':'dxy.f',
+    'SPY':'spy.us','QQQ':'qqq.us','^VIX':'vix','^TNX':'10ust.b','DX-Y.NYB':'usdx.f',
     'XLK':'xlk.us','XLF':'xlf.us','XLE':'xle.us','XLV':'xlv.us','XLI':'xli.us',
     'XLY':'xly.us','XLP':'xlp.us','XLU':'xlu.us','XLB':'xlb.us','XLRE':'xlre.us','XLC':'xlc.us',
   },
@@ -678,51 +678,60 @@ const DataFetcher = {
     if (!s) throw new Error(`No stooq mapping for ${symbol}`);
     const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Stooq HTTP ${res.status} for ${s}`);
+    if (!res.ok) throw new Error(`Stooq HTTP ${res.status}`);
     const text = await res.text();
-    // CSV: Date,Open,High,Low,Close,Volume
+    // Detect Stooq error responses
+    if (!text || text.length < 30 || text.trim().startsWith('<') ||
+        text.includes('Brak') || text.includes('No data') || text.includes('error')) {
+      throw new Error(`Stooq bad response for ${s}`);
+    }
     const lines = text.trim().split('\n');
-    if (lines.length < 3) throw new Error(`Stooq no data for ${s}`);
+    if (lines.length < 3) throw new Error(`Stooq too few rows for ${s}`);
     const rows = lines.slice(1).map(l => {
       const [date, open, high, low, close, volume] = l.split(',');
-      return {
-        date, open: +open, high: +high, low: +low,
-        close: +close, volume: +(volume||0)
-      };
-    }).filter(r => r.close && !isNaN(r.close));
-    if (rows.length < 20) throw new Error(`Stooq too few rows for ${s}`);
+      return { date, open:+open, high:+high, low:+low, close:+close, volume:+(volume||0) };
+    }).filter(r => r.close && !isNaN(r.close) && r.close > 0);
+    if (rows.length < 20) throw new Error(`Stooq too few valid rows for ${s}: ${rows.length}`);
     return rows;
   },
 
-  async fetchYahoo(symbol) {
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1y&corsDomain=finance.yahoo.com`;
-    const res = await fetch(url, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!res.ok) throw new Error(`Yahoo HTTP ${res.status} for ${symbol}`);
+  async fetchYahooUrl(url) {
+    const res = await fetch(url, { headers:{ 'Accept':'application/json' } });
+    if (!res.ok) throw new Error(`Yahoo HTTP ${res.status}`);
     const json = await res.json();
     const result = json.chart?.result?.[0];
-    if (!result) throw new Error(`Yahoo no data for ${symbol}`);
+    if (!result) throw new Error('Yahoo no result');
     const ts = result.timestamp;
     const q  = result.indicators.quote[0];
-    return ts.map((t, i) => ({
-      date:   new Date(t * 1000).toISOString().slice(0,10),
-      open:   q.open[i], high: q.high[i], low: q.low[i],
-      close:  q.close[i], volume: q.volume[i] || 0,
-    })).filter(r => r.close != null);
+    if (!ts || !q) throw new Error('Yahoo missing data');
+    return ts.map((t,i) => ({
+      date:   new Date(t*1000).toISOString().slice(0,10),
+      open:   q.open[i]||0, high: q.high[i]||0, low: q.low[i]||0,
+      close:  q.close[i],   volume: q.volume[i]||0,
+    })).filter(r => r.close != null && !isNaN(r.close) && r.close > 0);
+  },
+
+  async fetchYahoo(symbol) {
+    const enc = encodeURIComponent(symbol);
+    const urls = [
+      `https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
+      `https://query2.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${enc}?interval=1d&range=1y&includePrePost=false&corsDomain=finance.yahoo.com`,
+    ];
+    for (const url of urls) {
+      try { return await this.fetchYahooUrl(url); } catch(e) { /* try next */ }
+    }
+    throw new Error(`All Yahoo URLs failed for ${symbol}`);
   },
 
   async fetchChart(symbol) {
-    // Try Stooq first; fall back to Yahoo Finance
-    try {
-      return await this.fetchStooq(symbol);
-    } catch (e1) {
-      console.warn(`Stooq failed for ${symbol} (${e1.message}), trying Yahoo...`);
-      try {
-        return await this.fetchYahoo(symbol);
-      } catch (e2) {
-        console.warn(`Yahoo also failed for ${symbol} (${e2.message})`);
-        throw new Error(`Both APIs failed for ${symbol}`);
+    try { return await this.fetchStooq(symbol); }
+    catch(e1) {
+      console.warn(`Stooq failed for ${symbol}: ${e1.message}`);
+      try { return await this.fetchYahoo(symbol); }
+      catch(e2) {
+        console.warn(`Yahoo failed for ${symbol}: ${e2.message}`);
+        throw new Error(`All sources failed for ${symbol}`);
       }
     }
   },
@@ -737,9 +746,9 @@ const DataFetcher = {
       all.map(sym => this.fetchChart(sym).then(data => ({ sym, data })))
     );
     const raw = {};
-    results.forEach((r, i) => {
+    results.forEach((r,i) => {
       if (r.status === 'fulfilled') raw[r.value.sym] = r.value.data;
-      else console.warn(`All fetches failed for ${all[i]}:`, r.reason?.message);
+      else console.warn(`All sources failed for ${all[i]}:`, r.reason?.message);
     });
     return raw;
   }
